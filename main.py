@@ -56,7 +56,7 @@ class ProviderConnections:
                 try:
                     self.graph.nodes[provider]["specialties"] = specialties
                 except:
-                    print(f"{provider} provider id not in nodes")
+                    print(f"Error: {provider} provider id not in nodes")
 
                 # stop at however many rows
                 if lines_read >= rows:
@@ -66,6 +66,7 @@ class ProviderConnections:
         for node in self.graph.nodes:
             if node["specialties"]:
                 restriction_map = []
+                node["restriction"] = restriction_map
                 score = 0
                 # linear transformation of specialties with restriction map to unify data
                 for s, r in zip(node["specialties"], restriction_map):
@@ -73,7 +74,19 @@ class ProviderConnections:
                 node["score"] = score
 
     def sheaf_laplacian(self):
-        pass
+        sheaf_laplacian = []
+        for edge in self.graph.edges:
+            try:
+                coboundary_map = self.graph.nodes[edge[0]]["restriction"].extend(self.graph.nodes[edge[1]]["restriction"])
+                for x in coboundary_map:
+                    row = []
+                    for y in coboundary_map:
+                        row.append(x * y)
+                    sheaf_laplacian.append(row)
+            except:
+                print("Error: restriction not available for one or more nodes")
+
+        return sheaf_laplacian
 
     def draw_graph(self, edge_colors:bool=True, edge_labels:bool=True):
         """
@@ -115,4 +128,5 @@ class ProviderConnections:
 if __name__ == "__main__":
     pc = ProviderConnections()
     pc.import_txt_data(rows=100)
+    pc.sheaf_laplacian()
     pc.draw_graph(edge_colors=True, edge_labels=True)

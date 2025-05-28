@@ -1,11 +1,12 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
+import csv
 
 
 class ProviderConnections:
     def __init__(self, provider_data_file:str="pa_data.txt",
-                 specialty_data_file:str="None"):
+                 specialty_data_file:str="specialty_data.csv"):
         self.provider_data_file = provider_data_file
         self.provider_specialty_data_file = specialty_data_file
         self.graph = nx.Graph()
@@ -41,22 +42,30 @@ class ProviderConnections:
         :return: None
         """
         lines_read = 0
+        taxonomy_columns = []
         with open(self.provider_specialty_data_file, "r") as data:
-            for line in data:
+            csv_reader = csv.reader(data)
+            for line in csv_reader:
                 # line format:
                 # provider, specialties
                 lines_read += 1
                 # extract data
-                row_data = line.split(",")
-                provider = int(row_data[0].strip())
                 # this will probably have to be changed
-                specialties = int(row_data[1].strip())
+                if lines_read == 1:
+                    for i in range(len(line)):
+                        column = line[i]
+                        if "Taxonomy Code" in column:
+                            taxonomy_columns.append(i)
 
-                # if node in graph, update specialties
-                try:
-                    self.graph.nodes[provider]["specialties"] = specialties
-                except:
-                    print(f"Error: {provider} provider id not in nodes")
+                else:
+                    if self.graph.nodes[line[0]]:
+                        specialties = []
+                        for index in taxonomy_columns:
+                            if line[index]:
+                                specialties.append(line[index])
+
+                        print(specialties)
+                        self.graph.nodes[line[0]]["specialties"] = specialties
 
                 # stop at however many rows
                 if lines_read >= rows:
@@ -77,12 +86,19 @@ class ProviderConnections:
         sheaf_laplacian = []
         for edge in self.graph.edges:
             try:
+                # basically just the two restriction maps combined
+                for r in self.graph.nodes[edge[0]]["restriction"]:
+                    r *= -1
                 coboundary_map = self.graph.nodes[edge[0]]["restriction"].extend(self.graph.nodes[edge[1]]["restriction"])
+                # linear multiply column coboundary map x row coboundary map
                 for x in coboundary_map:
                     row = []
                     for y in coboundary_map:
                         row.append(x * y)
                     sheaf_laplacian.append(row)
+                # revert restriction
+                for r in self.graph.nodes[edge[0]]["restriction"]:
+                    r *= -1
             except:
                 print("Error: restriction not available for one or more nodes")
 
@@ -128,5 +144,6 @@ class ProviderConnections:
 if __name__ == "__main__":
     pc = ProviderConnections()
     pc.import_txt_data(rows=100)
-    pc.sheaf_laplacian()
+    #pc.add_specialties(rows=50)
+    #pc.sheaf_laplacian()
     pc.draw_graph(edge_colors=True, edge_labels=True)

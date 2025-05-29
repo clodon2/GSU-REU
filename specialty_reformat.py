@@ -31,9 +31,9 @@ def create_new_specialty_csv():
                 row = [line[0]]
                 for index in taxonomy_columns:
                     row.append(line[index])
-                for index in switch_columns:
+                for i, index in enumerate(switch_columns):
                     if line[index] == "Y":
-                        row.append(row[switch_columns.index(index) + 1])
+                        row.append(row[i + 1])
                         break
 
                 if row[1] != '':
@@ -96,5 +96,5 @@ def add_key_value_to_json(key, value):
 
 
 if __name__ == "__main__":
-    #create_new_specialty_csv()
-    create_new_specialty_json()
+    create_new_specialty_csv()
+    #create_new_specialty_json()

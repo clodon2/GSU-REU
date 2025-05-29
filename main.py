@@ -48,9 +48,11 @@ class ProviderConnections:
         :return:
         """
         print("adding specialties...")
+        line_count = 0
         with open(self.provider_specialty_data_file, "r") as data:
             csv_reader = csv.reader(data)
             for line in csv_reader:
+                line_count += 1
                 provider = int(line[0])
                 if self.graph.has_node(provider):
                     specialties = []
@@ -60,6 +62,8 @@ class ProviderConnections:
 
                     self.graph.nodes[provider]["specialties"] = specialties
                     self.graph.nodes[provider]["primary"] = line[-1]
+
+        print(f"{line_count} in reformatted csv")
 
         remove_nodes = []
         for node in self.graph.nodes:
@@ -77,14 +81,21 @@ class ProviderConnections:
 
     def build_graph(self):
         """
-        create graph structure for providers and write to graph file
-        :return: graph file creation output
+        create graph structure for providers and add specialties
+        :return:
         """
         print("building graph...")
         self.import_txt_data(rows=999999999999999999)
         self.add_specialties_fast()
+
+
+    def save_graph(self):
+        """
+        save graph locally as graphml file, expensive
+        :return:
+        """
         print("writing graph...")
-        return nx.write_graphml(self.graph, self.graph_data_file)
+        nx.write_graphml(self.graph, self.graph_data_file)
 
 
     def load_graph(self):

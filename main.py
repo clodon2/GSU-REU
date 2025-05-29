@@ -6,7 +6,7 @@ import csv
 
 class ProviderConnections:
     def __init__(self, provider_data_file:str="pa_data.txt",
-                 specialty_data_file:str="specialty_data.csv"):
+                 specialty_data_file:str="specialty_reformatted.csv"):
         self.provider_data_file = provider_data_file
         self.provider_specialty_data_file = specialty_data_file
         self.graph = nx.Graph()
@@ -17,6 +17,7 @@ class ProviderConnections:
         :param rows: number of rows of data to add (edges)
         :return: None
         """
+        print("importing provider data...")
         lines_read = 0
         with open(self.provider_data_file, "r") as data:
             for line in data:
@@ -28,6 +29,8 @@ class ProviderConnections:
                 provider1 = int(row_data[0].strip())
                 provider2 = int(row_data[1].strip())
                 pairs = int(row_data[2].strip())
+                benes = int(row_data[3].strip())
+                sameday = int(row_data[4].strip())
 
                 self.graph.add_edge(provider1, provider2, weight=pairs)
 
@@ -35,41 +38,70 @@ class ProviderConnections:
                 if lines_read >= rows:
                     break
 
-    def add_specialties(self, rows:int=500):
+        print(lines_read)
+
+    def add_specialties_fast(self):
         """
-        add specialty data to nodes in graph
-        :param rows: number of rows of data to go through (nodes to update)
-        :return: None
+        add specialties to all possible nodes, delete those without specialties
+        :return:
         """
-        lines_read = 0
-        taxonomy_columns = []
+        print("adding specialties...")
         with open(self.provider_specialty_data_file, "r") as data:
             csv_reader = csv.reader(data)
             for line in csv_reader:
-                # line format:
-                # provider, specialties
-                lines_read += 1
-                # extract data
-                # this will probably have to be changed
-                if lines_read == 1:
-                    for i in range(len(line)):
-                        column = line[i]
-                        if "Taxonomy Code" in column:
-                            taxonomy_columns.append(i)
+                provider = int(line[0])
+                if self.graph.has_node(provider):
+                    specialties = []
+                    for sc in line[1:-1]:
+                        if sc:
+                            specialties.append(sc)
 
-                else:
-                    if self.graph.nodes[line[0]]:
+                    self.graph.nodes[provider]["specialties"] = specialties
+                    self.graph.nodes[provider]["primary"] = line[-1]
+
+        for node in self.graph.nodes:
+            try:
+                print(self.graph.nodes[node]["specialties"])
+            except:
+                print(f"no specialties for node {node}")
+
+    def add_specialties(self):
+        """
+        **deprecated**
+        add specialty data to nodes in graph
+        :return: None
+        """
+        remove_nodes = []
+        with open(self.provider_specialty_data_file, "r") as data:
+            csv_reader = csv.reader(data)
+            for provider in self.graph.nodes:
+                data.seek(0)
+                csv_reader = csv.reader(data)
+                specialty_set = False
+                count = 0
+                for line in csv_reader:
+                    count += 1
+                    # line format:
+                    # provider, specialty1. specialty2, etc., primary spec
+                    # extract data
+                    if int(provider) == int(line[0]):
+                        print("id seen")
+                        specialty_set = True
                         specialties = []
-                        for index in taxonomy_columns:
-                            if line[index]:
-                                specialties.append(line[index])
+                        for sc in line[1:-1]:
+                            specialties.append(sc)
 
-                        print(specialties)
-                        self.graph.nodes[line[0]]["specialties"] = specialties
+                        self.graph.nodes[provider]["specialties"] = specialties
+                        self.graph.nodes[provider]["primary"] = line[-1]
+                        break
+                print(count)
+                if not specialty_set:
+                    remove_nodes.append(provider)
 
-                # stop at however many rows
-                if lines_read >= rows:
-                    break
+        for node in remove_nodes:
+            print(f"removed node: {node}")
+            self.graph.remove_node(node)
+
 
     def sheaf_linear_transform(self):
         for node in self.graph.nodes:
@@ -143,7 +175,10 @@ class ProviderConnections:
 
 if __name__ == "__main__":
     pc = ProviderConnections()
-    pc.import_txt_data(rows=100)
+    pc.import_txt_data(rows=99999999999999999999999)
+    print(pc.graph.number_of_nodes())
+    pc.add_specialties_fast()
+    #pc.add_specialties()
     #pc.add_specialties(rows=50)
     #pc.sheaf_laplacian()
-    pc.draw_graph(edge_colors=True, edge_labels=True)
+    #pc.draw_graph(edge_colors=True, edge_labels=True)

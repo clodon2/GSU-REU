@@ -2,6 +2,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
 import csv
+import numpy as np
 
 
 class ProviderConnections:
@@ -34,7 +35,7 @@ class ProviderConnections:
                 benes = int(row_data[3].strip())
                 sameday = int(row_data[4].strip())
 
-                self.graph.add_edge(provider1, provider2, weight=pairs)
+                self.graph.add_edge(provider1, provider2, weight=pairs, beneficiaries=benes, same_day=sameday)
 
                 # stop at however many rows
                 if lines_read >= rows:
@@ -87,6 +88,9 @@ class ProviderConnections:
         print("building graph...")
         self.import_txt_data(rows=999999999999999999)
         self.add_specialties_fast()
+        self.sheaf_specialty_conversion()
+        self.add_provider_totals()
+        self.add_coboundary_matrices()
 
 
     def save_graph(self):
@@ -105,6 +109,53 @@ class ProviderConnections:
         """
         print("importing graph...")
         self.graph = nx.read_graphml(self.graph_data_file)
+
+
+    def sheaf_specialty_conversion(self):
+        print("adding numerical specialty vectors...")
+        for node in self.graph.nodes:
+            num_specialties = []
+            for spec in self.graph.nodes[node]["specialties"]:
+                if spec == self.graph.nodes[node]["primary"]:
+                    num_specialties.append(2)
+                else:
+                    num_specialties.append(1)
+
+            self.graph.nodes[node]["sheaf_vector"] = np.array(num_specialties)
+
+
+    def add_provider_totals(self):
+        print("adding edge totals to providers...")
+        for node in self.graph.nodes:
+            self.graph.nodes[node]["pair_total"] = 1
+            self.graph.nodes[node]["beneficiary_total"] = 1
+            self.graph.nodes[node]["same_total"] = 1
+            for connection in self.graph[node]:
+                pairs = self.graph[node][connection]["weight"]
+                benes = self.graph[node][connection]["beneficiaries"]
+                same_days = self.graph[node][connection]["same_day"]
+
+                self.graph.nodes[node]["pair_total"] += pairs
+                self.graph.nodes[node]["beneficiary_total"] += benes
+                self.graph.nodes[node]["same_total"] += same_days
+
+
+    def add_coboundary_matrices(self):
+        print("adding coboundary matrices to edges...")
+        for edge in self.graph.edges:
+            edge_attr = self.graph.get_edge_data(edge[0], edge[1])
+            edge_pairs = edge_attr["weight"]
+            edge_benes = edge_attr["beneficiaries"]
+            edge_same_days = edge_attr["same_day"]
+            edge_restrictions = []
+            for provider in edge:
+                pair_percentage = edge_pairs / self.graph.nodes[provider]["pair_total"]
+                bene_total = edge_benes / self.graph.nodes[provider]["beneficiary_total"]
+                same_day_total = edge_same_days / self.graph.nodes[provider]["same_total"]
+                restriction = np.array([pair_percentage, bene_total, same_day_total])
+                edge_restrictions.append(self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction))
+
+            self.graph[edge[0]][edge[1]]["coboundary"] = np.array([edge_restrictions[1] - edge_restrictions[0]])
 
 
     def sheaf_linear_transform(self):

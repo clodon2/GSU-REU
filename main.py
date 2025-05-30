@@ -6,9 +6,20 @@ import numpy as np
 
 
 class ProviderConnections:
-    def __init__(self, provider_data_file:str="pa_data.txt",
+    def __init__(self, primary_specialty_weight:int=2, restriction_weights:list=[1, 1, 1],
+                 provider_data_file:str="pa_data.txt",
                  specialty_data_file:str="specialty_reformatted.csv",
                  graph_data_file:str="physician_graph.gexf"):
+        """
+        create provider graph manager
+        :param primary_specialty_weight: the weight given to a provider's main specialty
+        :param restriction_weights: [pair count weight, beneficiary count weight, same day count weight]
+        :param provider_data_file: data file to load provider edges from (nodes created also)
+        :param specialty_data_file: data file to load specialty data from for providers
+        :param graph_data_file: data file to save/load graph to
+        """
+        self.primary_specialty_weight = primary_specialty_weight
+        self.restriction_weights = restriction_weights
         self.provider_data_file = provider_data_file
         self.provider_specialty_data_file = specialty_data_file
         self.graph_data_file = graph_data_file
@@ -79,7 +90,6 @@ class ProviderConnections:
 
         print(f"{len(remove_nodes)} no specialty nodes removed")
 
-
     def build_graph(self):
         """
         create graph structure for providers and add specialties
@@ -92,7 +102,6 @@ class ProviderConnections:
         self.add_provider_totals()
         self.add_coboundary_matrices()
 
-
     def save_graph(self):
         """
         save graph locally as graphml file, expensive
@@ -100,7 +109,6 @@ class ProviderConnections:
         """
         print("writing graph...")
         nx.write_graphml(self.graph, self.graph_data_file)
-
 
     def load_graph(self):
         """
@@ -110,23 +118,32 @@ class ProviderConnections:
         print("importing graph...")
         self.graph = nx.read_graphml(self.graph_data_file)
 
-
     def sheaf_specialty_conversion(self):
+        """
+        add an array to node vertices that stores numerical conversion of specialty list
+        :return:
+        """
         print("adding numerical specialty vectors...")
         for node in self.graph.nodes:
             num_specialties = []
             for spec in self.graph.nodes[node]["specialties"]:
+                # weight the primary specialty more
                 if spec == self.graph.nodes[node]["primary"]:
-                    num_specialties.append(2)
+                    num_specialties.append(self.primary_specialty_weight)
                 else:
                     num_specialties.append(1)
 
+            # add to node
             self.graph.nodes[node]["sheaf_vector"] = np.array(num_specialties)
 
-
     def add_provider_totals(self):
+        """
+        total values for all edges a node is connected to, store in node as attribute
+        :return:
+        """
         print("adding edge totals to providers...")
         for node in self.graph.nodes:
+            # start with one to avoid division by 0 in add_coboundary_matrices
             self.graph.nodes[node]["pair_total"] = 1
             self.graph.nodes[node]["beneficiary_total"] = 1
             self.graph.nodes[node]["same_total"] = 1
@@ -139,37 +156,36 @@ class ProviderConnections:
                 self.graph.nodes[node]["beneficiary_total"] += benes
                 self.graph.nodes[node]["same_total"] += same_days
 
-
     def add_coboundary_matrices(self):
+        """
+        add coboundary map to each edge, based on each provider's unique restriction map for each edge
+        :return:
+        """
         print("adding coboundary matrices to edges...")
         for edge in self.graph.edges:
+            # get edge specific values
             edge_attr = self.graph.get_edge_data(edge[0], edge[1])
             edge_pairs = edge_attr["weight"]
             edge_benes = edge_attr["beneficiaries"]
             edge_same_days = edge_attr["same_day"]
             edge_restrictions = []
             for provider in edge:
-                pair_percentage = edge_pairs / self.graph.nodes[provider]["pair_total"]
-                bene_total = edge_benes / self.graph.nodes[provider]["beneficiary_total"]
-                same_day_total = edge_same_days / self.graph.nodes[provider]["same_total"]
+                # get restriction maps based on provider edge percentages
+                pair_percentage = self.restriction_weights[0] * (edge_pairs / self.graph.nodes[provider]["pair_total"])
+                bene_total = self.restriction_weights[1] * (edge_benes / self.graph.nodes[provider]["beneficiary_total"])
+                same_day_total = self.restriction_weights[2] * (edge_same_days / self.graph.nodes[provider]["same_total"])
                 restriction = np.array([pair_percentage, bene_total, same_day_total])
                 edge_restrictions.append(self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction))
 
+            # add coboundary map to edge
             self.graph[edge[0]][edge[1]]["coboundary"] = np.array([edge_restrictions[1] - edge_restrictions[0]])
 
-
-    def sheaf_linear_transform(self):
-        for node in self.graph.nodes:
-            if node["specialties"]:
-                restriction_map = []
-                node["restriction"] = restriction_map
-                score = 0
-                # linear transformation of specialties with restriction map to unify data
-                for s, r in zip(node["specialties"], restriction_map):
-                    score += s * r
-                node["score"] = score
-
     def sheaf_laplacian(self):
+        """
+        compute sheaf laplacian (transposed coboundary map * og coboundary map)
+        :return:
+        """
+        # all of this code needs to be replaced probably
         sheaf_laplacian = []
         for edge in self.graph.edges:
             try:

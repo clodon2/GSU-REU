@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib import colormaps
 import csv
 import numpy as np
+import scipy as sp
 
 
 class ProviderConnections:
@@ -24,6 +25,9 @@ class ProviderConnections:
         self.provider_specialty_data_file = specialty_data_file
         self.graph_data_file = graph_data_file
         self.graph = nx.Graph()
+        self.coboundary_columns = 0
+        self.coboundary_map = None
+        self.sheaf_laplacian = None
 
     def import_txt_data(self, rows:int=500):
         """
@@ -90,17 +94,18 @@ class ProviderConnections:
 
         print(f"{len(remove_nodes)} no specialty nodes removed")
 
-    def build_graph(self):
+    def build_graph(self, rows=999999999999999999):
         """
         create graph structure for providers and add specialties
         :return:
         """
         print("building graph...")
-        self.import_txt_data(rows=999999999999999999)
+        self.import_txt_data(rows=rows)
         self.add_specialties_fast()
         self.sheaf_specialty_conversion()
         self.add_provider_totals()
-        self.add_coboundary_matrices()
+        self.compute_coboundary_map()
+        self.sheaf_laplacian()
 
     def save_graph(self):
         """
@@ -142,7 +147,13 @@ class ProviderConnections:
         :return:
         """
         print("adding edge totals to providers...")
+        col = 0
         for node in self.graph.nodes:
+            # add indices to add in coboundary map later
+            spec_num = len(self.graph.nodes[node]["specialties"])
+            self.graph.nodes[node]["indices"] = list(range(col, col + spec_num))
+            # start at next free index
+            col += spec_num + 1
             # start with one to avoid division by 0 in add_coboundary_matrices
             self.graph.nodes[node]["pair_total"] = 1
             self.graph.nodes[node]["beneficiary_total"] = 1
@@ -156,56 +167,80 @@ class ProviderConnections:
                 self.graph.nodes[node]["beneficiary_total"] += benes
                 self.graph.nodes[node]["same_total"] += same_days
 
-    def add_coboundary_matrices(self):
+        self.coboundary_columns = col - 1
+        print("coboundary_map_columns: ", self.coboundary_columns)
+
+    def compute_coboundary_map(self):
         """
         add coboundary map to each edge, based on each provider's unique restriction map for each edge
         :return:
         """
         print("adding coboundary matrices to edges...")
-        for edge in self.graph.edges:
+        nonzero_restrictions = []
+        nzr_row_indices = []
+        nzr_column_indices = []
+        #coboundary_map = sp.sparse.lil_matrix((len(self.graph.edges), self.coboundary_columns), dtype=np.float64)
+        for i, edge in enumerate(self.graph.edges):
             # get edge specific values
             edge_attr = self.graph.get_edge_data(edge[0], edge[1])
             edge_pairs = edge_attr["weight"]
             edge_benes = edge_attr["beneficiaries"]
             edge_same_days = edge_attr["same_day"]
-            edge_restrictions = []
+            #edge_restrictions = []
             for provider in edge:
                 # get restriction maps based on provider edge percentages
                 pair_percentage = self.restriction_weights[0] * (edge_pairs / self.graph.nodes[provider]["pair_total"])
                 bene_total = self.restriction_weights[1] * (edge_benes / self.graph.nodes[provider]["beneficiary_total"])
                 same_day_total = self.restriction_weights[2] * (edge_same_days / self.graph.nodes[provider]["same_total"])
                 restriction = np.array([pair_percentage, bene_total, same_day_total])
-                edge_restrictions.append(self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction))
 
+                # add info to array for sparse matrix conversion
+                nonzero_restrictions.extend((self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction)).tolist())
+                nzr_column_indices.extend(self.graph.nodes[provider]["indices"])
+                for input_num in range(len(self.graph.nodes[provider]["indices"])):
+                    nzr_row_indices.append(i)
+
+                #edge_restrictions.append(self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction))
+
+            """
             # add coboundary map to edge
-            self.graph[edge[0]][edge[1]]["coboundary"] = np.array([edge_restrictions[1] - edge_restrictions[0]])
+            #self.graph[edge[0]][edge[1]]["coboundary"] = [edge_restrictions[1] - edge_restrictions[0]]
+            edge_restrictions[0] = edge_restrictions[0] * -1
+            print(f"adding row {i}")
+            coboundary_row = [0 for i in range(self.coboundary_columns)]
+            for index, restriction in zip(self.graph.nodes[edge[0]]["indices"], edge_restrictions[0]):
+                coboundary_row[index] = restriction
+            for index, restriction in zip(self.graph.nodes[edge[1]]["indices"], edge_restrictions[1]):
+                coboundary_row[index] = restriction
 
-    def sheaf_laplacian(self):
+            print(coboundary_row)
+            coboundary_map[i, :] = coboundary_row
+            #coboundary_map.append(coboundary_row)
+            
+
+        sparse_csr = coboundary_map.tocsr()
+        """
+        coboundary_map = sp.sparse.csr_matrix((nonzero_restrictions, (nzr_row_indices, nzr_column_indices)),
+                                              shape=(len(self.graph.edges), self.coboundary_columns))
+        print(coboundary_map)
+
+        self.coboundary_map = coboundary_map
+
+        return coboundary_map
+
+    def compute_sheaf_laplacian(self):
         """
         compute sheaf laplacian (transposed coboundary map * og coboundary map)
         :return:
         """
-        # all of this code needs to be replaced probably
-        sheaf_laplacian = []
-        for edge in self.graph.edges:
-            try:
-                # basically just the two restriction maps combined
-                for r in self.graph.nodes[edge[0]]["restriction"]:
-                    r *= -1
-                coboundary_map = self.graph.nodes[edge[0]]["restriction"].extend(self.graph.nodes[edge[1]]["restriction"])
-                # linear multiply column coboundary map x row coboundary map
-                for x in coboundary_map:
-                    row = []
-                    for y in coboundary_map:
-                        row.append(x * y)
-                    sheaf_laplacian.append(row)
-                # revert restriction
-                for r in self.graph.nodes[edge[0]]["restriction"]:
-                    r *= -1
-            except:
-                print("Error: restriction not available for one or more nodes")
+        coboundary_map_t = self.coboundary_map.transpose()
 
-        return sheaf_laplacian
+        # multiply by transposition
+        sheaf_lap = self.coboundary_map.dot(coboundary_map_t)
+
+        self.sheaf_laplacian = sheaf_lap
+
+        return sheaf_lap
 
     def draw_graph(self, edge_colors:bool=True, edge_labels:bool=True):
         """
@@ -246,6 +281,6 @@ class ProviderConnections:
 
 if __name__ == "__main__":
     pc = ProviderConnections()
-    pc.build_graph()
+    pc.build_graph(rows=1_000_000)
     #pc.sheaf_laplacian()
     #pc.draw_graph(edge_colors=True, edge_labels=True)

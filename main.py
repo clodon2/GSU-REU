@@ -28,6 +28,7 @@ class ProviderConnections:
         self.coboundary_columns = 0
         self.coboundary_map = None
         self.sheaf_laplacian = None
+        self.rankings = {}
 
     def import_txt_data(self, rows:int=500):
         """
@@ -105,7 +106,9 @@ class ProviderConnections:
         self.sheaf_specialty_conversion()
         self.add_provider_totals()
         self.compute_coboundary_map()
-        self.sheaf_laplacian()
+        self.compute_sheaf_laplacian()
+        self.compute_centrality()
+        self.get_ranking()
 
     def save_graph(self):
         """
@@ -167,7 +170,7 @@ class ProviderConnections:
                 self.graph.nodes[node]["beneficiary_total"] += benes
                 self.graph.nodes[node]["same_total"] += same_days
 
-        self.coboundary_columns = col - 1
+        self.coboundary_columns = col
         print("coboundary_map_columns: ", self.coboundary_columns)
 
     def compute_coboundary_map(self):
@@ -222,7 +225,6 @@ class ProviderConnections:
         """
         coboundary_map = sp.sparse.csr_matrix((nonzero_restrictions, (nzr_row_indices, nzr_column_indices)),
                                               shape=(len(self.graph.edges), self.coboundary_columns))
-        print(coboundary_map)
 
         self.coboundary_map = coboundary_map
 
@@ -233,14 +235,64 @@ class ProviderConnections:
         compute sheaf laplacian (transposed coboundary map * og coboundary map)
         :return:
         """
+        print("computing sheaf laplacian...")
         coboundary_map_t = self.coboundary_map.transpose()
 
         # multiply by transposition
-        sheaf_lap = self.coboundary_map.dot(coboundary_map_t)
+        sheaf_lap = coboundary_map_t.dot(self.coboundary_map)
 
         self.sheaf_laplacian = sheaf_lap
+        print("Coboundary map shape:", self.coboundary_map.shape)
+        print("Coboundary map transpose shape:", coboundary_map_t.shape)
+        print("Sheaf Laplacian shape:", self.sheaf_laplacian.shape)
 
         return sheaf_lap
+
+    def compute_centrality(self, values_to_consider=2):
+        """
+        get centrality score for each provider
+        :param values_to_consider: number of eigenvalues to include in the calculation, (number in most influential)
+        :return:
+        """
+        print("computing sheaf laplacian energy...")
+        eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(self.sheaf_laplacian, k=values_to_consider, which="LM")
+        sheaf_laplacian_energy = sum(val**2 for val in eigenvalues)
+        print(f"Sheaf Laplacian Energy: ", sheaf_laplacian_energy)
+        print("computing sheaf laplacian centralities")
+        for node in self.graph.nodes:
+            self.graph.nodes[node]["centralities"] = []
+            for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
+                lil_sheaf_laplacian = self.sheaf_laplacian.tolil()
+                for row in range(lil_sheaf_laplacian.shape[0]):
+                    lil_sheaf_laplacian[row, specialty] = 0
+                spec_removed_sheaf_laplacian = lil_sheaf_laplacian.tocsr()
+                spec_removed_sheaf_laplacian.eliminate_zeros()
+                eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(spec_removed_sheaf_laplacian, k=values_to_consider,
+                                                                  which="LM")
+                spec_sheaf_laplacian_energy = sum(val**2 for val in eigenvalues)
+                centrality = (sheaf_laplacian_energy - spec_sheaf_laplacian_energy) / sheaf_laplacian_energy
+                self.graph.nodes[node]["centralities"].append(centrality)
+                if specialty_name in self.rankings:
+                    self.rankings[specialty_name][node] = centrality
+                else:
+                    self.rankings[specialty_name] = {}
+                    self.rankings[specialty_name][node] = centrality
+
+    def get_ranking(self):
+        """
+        get rankings of providers ine ach specialty
+        :return:
+        """
+        for specialty in self.rankings:
+            print(specialty)
+            values = self.rankings[specialty]
+            sorted_rankings = sorted(values.items(), key=lambda item: item[1])
+            np.set_printoptions(suppress=True)
+            readable_rankings = []
+            for t in sorted_rankings:
+                readable_rankings.append((t[0], round(t[1], 8)))
+            print(readable_rankings)
+
 
     def draw_graph(self, edge_colors:bool=True, edge_labels:bool=True):
         """
@@ -281,6 +333,6 @@ class ProviderConnections:
 
 if __name__ == "__main__":
     pc = ProviderConnections()
-    pc.build_graph(rows=1_000_000)
+    pc.build_graph(rows=1_000)
     #pc.sheaf_laplacian()
     #pc.draw_graph(edge_colors=True, edge_labels=True)

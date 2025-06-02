@@ -4,6 +4,7 @@ from matplotlib import colormaps
 import csv
 import numpy as np
 import scipy as sp
+from data_comparison import CompareData
 
 
 class ProviderConnections:
@@ -220,7 +221,7 @@ class ProviderConnections:
 
         return sheaf_lap
 
-    def compute_centrality(self, values_to_consider=10):
+    def compute_centrality(self, values_to_consider=5):
         """
         get centrality score for each provider
         :param values_to_consider: number of eigenvalues to include in the calculation, (number in most influential)
@@ -265,6 +266,14 @@ class ProviderConnections:
         get rankings of providers based on specialties
         :return:
         """
+        compare = CompareData()
+        sorted_rankings = {}
+        for specialty in self.rankings:
+            values = self.rankings[specialty]
+            # reorder to see best provider
+            sorted_rankings[specialty] = sorted(values.items(), key=lambda item: item[1], reverse=True)
+        compare.compare(self.graph, sorted_rankings)
+        """
         for specialty in self.rankings:
             print(specialty)
             values = self.rankings[specialty]
@@ -276,6 +285,7 @@ class ProviderConnections:
             for t in sorted_rankings:
                 readable_rankings.append((t[0], round(t[1], 8)))
             print(readable_rankings)
+        """
 
     def compute_all_give_rankings(self):
         """
@@ -327,7 +337,7 @@ class ProviderConnections:
 
 if __name__ == "__main__":
     pc = ProviderConnections()
-    pc.build_graph(rows=1_000_000)
+    pc.build_graph()
     pc.compute_all_give_rankings()
     #pc.sheaf_laplacian()
     #pc.draw_graph(edge_colors=True, edge_labels=True)

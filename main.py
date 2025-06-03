@@ -4,6 +4,7 @@ from matplotlib import colormaps
 import csv
 import numpy as np
 import scipy as sp
+import time
 from data_comparison import CompareData
 
 
@@ -38,6 +39,7 @@ class ProviderConnections:
         :return: None
         """
         print("importing provider data...")
+        start = time.time()
         lines_read = 0
         with open(self.provider_data_file, "r") as data:
             for line in data:
@@ -58,7 +60,9 @@ class ProviderConnections:
                 if lines_read >= rows:
                     break
 
-        print(f"{lines_read} edges added")
+        end = time.time()
+
+        print(f"{lines_read} edges added in {start - end}")
 
     def add_specialties_fast(self):
         """
@@ -66,6 +70,7 @@ class ProviderConnections:
         :return:
         """
         print("adding specialties...")
+        start = time.time()
         line_count = 0
         with open(self.provider_specialty_data_file, "r") as data:
             csv_reader = csv.reader(data)
@@ -81,7 +86,9 @@ class ProviderConnections:
                     self.graph.nodes[provider]["specialties"] = specialties
                     self.graph.nodes[provider]["primary"] = line[-1]
 
+        end = time.time()
         print(f"{line_count} in reformatted csv")
+        print(f"finished in {start - end}")
 
         remove_nodes = []
         for node in self.graph.nodes:
@@ -102,10 +109,13 @@ class ProviderConnections:
         :return:
         """
         print("building graph...")
+        start = time.time()
         self.import_txt_data(rows=rows)
         self.add_specialties_fast()
         self.sheaf_specialty_conversion()
         self.add_provider_totals()
+        end = time.time()
+        print(f"graph built in {start - end}")
 
     def save_graph(self):
         """
@@ -129,6 +139,7 @@ class ProviderConnections:
         :return:
         """
         print("adding numerical specialty vectors...")
+        start = time.time()
         for node in self.graph.nodes:
             num_specialties = []
             for spec in self.graph.nodes[node]["specialties"]:
@@ -140,6 +151,8 @@ class ProviderConnections:
 
             # add to node
             self.graph.nodes[node]["sheaf_vector"] = np.array(num_specialties)
+        end = time.time()
+        print(f"specialty numerical finished in {start - end}")
 
     def add_provider_totals(self):
         """
@@ -147,6 +160,7 @@ class ProviderConnections:
         :return:
         """
         print("adding edge totals to providers...")
+        start = time.time()
         col = 0
         for node in self.graph.nodes:
             # add indices to add in coboundary map later
@@ -168,6 +182,8 @@ class ProviderConnections:
                 self.graph.nodes[node]["same_total"] += same_days
 
         self.coboundary_columns = col
+        end = time.time()
+        print(f"totals calculated in {start - end}")
 
     def compute_coboundary_map(self):
         """
@@ -175,6 +191,7 @@ class ProviderConnections:
         :return:
         """
         print("computing coboundary map...")
+        start = time.time()
         nonzero_restrictions = []
         nzr_row_indices = []
         nzr_column_indices = []
@@ -203,6 +220,8 @@ class ProviderConnections:
                                               shape=(len(self.graph.edges), self.coboundary_columns))
 
         self.coboundary_map = coboundary_map
+        end = time.time()
+        print(f"coboundary map found in {start - end}")
 
         return coboundary_map
 
@@ -212,12 +231,16 @@ class ProviderConnections:
         :return:
         """
         print("computing sheaf laplacian...")
+        start = time.time()
         coboundary_map_t = self.coboundary_map.transpose()
 
         # multiply by transposition
         sheaf_lap = coboundary_map_t.dot(self.coboundary_map)
 
         self.sheaf_laplacian = sheaf_lap
+        end = time.time()
+
+        print(f"sheaf laplacian done in {start - end}")
 
         return sheaf_lap
 
@@ -228,6 +251,7 @@ class ProviderConnections:
         :return:
         """
         print("computing sheaf laplacian energy...")
+        start = time.time()
         eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(self.sheaf_laplacian, k=values_to_consider, which="LM")
         sheaf_laplacian_energy = sum(val**2 for val in eigenvalues)
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
@@ -260,6 +284,9 @@ class ProviderConnections:
                 else:
                     self.rankings[specialty_name] = {}
                     self.rankings[specialty_name][node] = centrality
+
+        end = time.time()
+        print(f"energies found in {start - end}")
 
     def get_ranking(self):
         """
@@ -297,6 +324,24 @@ class ProviderConnections:
         self.compute_sheaf_laplacian()
         self.compute_centrality()
         self.get_ranking()
+
+    def add_test_data(self):
+        test_edges = [("v1", "v2"), ("v3", "v2"), ("v3", "v4"), ("v1", "v4")]
+
+        test_matrix = [
+            [-1, -2, 1, 0, 0, 0],
+            [0, -2, 3. -1, 0, 0],
+            [0, 0, 0, 3, -1, 1],
+            [2, 0, 0, 0, -1, 0]
+        ]
+
+        self.coboundary_map = sp.sparse.csr_matrix(([-1, -2, 1, -2, 3, -1, 3, -1, 1, 2, -1],
+                                                    ([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3], [0, 1, 2, 1, 2, 3, 3, 4, 5, 0, 4])),
+                                              shape=(len(test_matrix), len(test_matrix[0])))
+
+        print(self.coboundary_map)
+
+        self.compute_sheaf_laplacian()
 
     def draw_graph(self, edge_colors:bool=True, edge_labels:bool=True):
         """
@@ -337,7 +382,8 @@ class ProviderConnections:
 
 if __name__ == "__main__":
     pc = ProviderConnections()
-    pc.build_graph()
+    #pc.add_test_data()
+    pc.build_graph(rows=10_000)
     pc.compute_all_give_rankings()
     #pc.sheaf_laplacian()
     #pc.draw_graph(edge_colors=True, edge_labels=True)

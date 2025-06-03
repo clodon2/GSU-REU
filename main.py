@@ -6,11 +6,11 @@ import numpy as np
 import scipy as sp
 import time
 from multiprocessing import Pool
-from data_comparison import CompareData
+from data_comparison import CompareData, EvaluationMethods
 
 
 class ProviderConnections:
-    def __init__(self, primary_specialty_weight:int=2, restriction_weights:list=[1, 1, 1],
+    def __init__(self, primary_specialty_weight:float=2, restriction_weights:list=[1, 1, 1],
                  provider_data_file:str="pa_data.txt",
                  specialty_data_file:str="specialty_reformatted.csv",
                  graph_data_file:str="physician_graph.gexf"):
@@ -107,7 +107,7 @@ class ProviderConnections:
     def build_graph(self, rows=999999999999999999):
         """
         create graph structure for providers and add specialties
-        :return:
+        :return: the graph
         """
         print("building graph...")
         start = time.time()
@@ -117,6 +117,7 @@ class ProviderConnections:
         self.add_provider_totals()
         end = time.time()
         print(f"graph built in {end - start}")
+        return self.graph
 
     def save_graph(self):
         """
@@ -359,7 +360,7 @@ class ProviderConnections:
             values = self.rankings[specialty]
             # reorder to see best provider
             sorted_rankings[specialty] = sorted(values.items(), key=lambda item: item[1], reverse=True)
-        compare.compare(self.graph, sorted_rankings)
+        specs = compare.compare(self.graph, sorted_rankings, title="Sheaf Laplacian")
         """
         for specialty in self.rankings:
             print(specialty)
@@ -373,6 +374,7 @@ class ProviderConnections:
                 readable_rankings.append((t[0], round(t[1], 8)))
             print(readable_rankings)
         """
+        return specs
 
     def compute_all_give_rankings(self):
         """
@@ -382,8 +384,10 @@ class ProviderConnections:
         print("computing all for ranking...")
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centrality_multiprocessing(values_to_consider=100)
-        self.get_ranking()
+        self.compute_centrality_multiprocessing(values_to_consider=500)
+        specs = self.get_ranking()
+
+        return specs
 
     def add_test_data(self):
         test_edges = [("v1", "v2"), ("v3", "v2"), ("v3", "v4"), ("v1", "v4")]
@@ -441,9 +445,13 @@ class ProviderConnections:
 
 
 if __name__ == "__main__":
-    pc = ProviderConnections(restriction_weights=[1, .5, .1])
+    pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[.8, 1, 1])
     #pc.add_test_data()
-    pc.build_graph(rows=1_000)
-    pc.compute_all_give_rankings()
+    graph = pc.build_graph(rows=1_000)
+    spec_names = pc.compute_all_give_rankings()
+    ev = EvaluationMethods(graph)
+    eval_specs = ev.page_rank_all_specialties(spec_names)
+    eval_compare = CompareData()
+    eval_compare.compare(ev.graph, eval_specs, title="Page Ranking")
     #pc.sheaf_laplacian()
     #pc.draw_graph(edge_colors=True, edge_labels=True)

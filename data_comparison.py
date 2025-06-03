@@ -1,5 +1,6 @@
 import csv
-from networkx import Graph
+from networkx import Graph, pagerank
+import networkx as nx
 
 
 class CompareData:
@@ -49,7 +50,8 @@ class CompareData:
             values = self.provider_specialty_ranking[specialty]
             self.provider_specialty_ranking[specialty] = sorted(values, key=lambda item: item[1], reverse=True)
 
-    def compare(self, graph:Graph, computed_ranking:dict, show_lists=True, hits_n=20):
+    def compare(self, graph:Graph, computed_ranking:dict, title="unknonwn",
+                show_lists=False, hits_n=20, top_specialties=5):
         self.import_provider_ranking()
         self.add_provider_specialties(graph)
         self.import_taxonomy_info()
@@ -61,8 +63,11 @@ class CompareData:
             specialty_scores.append((specialty, len(self.provider_specialty_ranking[specialty])))
 
         specialty_scores = sorted(specialty_scores, key=lambda item: item[1], reverse=True)
-        specialty_scores = specialty_scores[:5]
+        specialty_scores = specialty_scores[:top_specialties]
 
+        mean_hits_at_n = 0
+
+        print(f"comparison of {title} to expected")
         for entry in specialty_scores:
             specialty = entry[0]
             # calculate hits@n
@@ -94,9 +99,19 @@ class CompareData:
             final_computed = final_computed[:hits_n]
             final_ranked = final_ranked[:hits_n]
 
+            # check percentage of correct shared
+            for i in final_computed:
+                for j in final_ranked:
+                    if i[0] == j[0]:
+                        hits_at_n += 1
+
+
+            # check if in exact position
+            """
             for i in range(hits_n):
                 if final_ranked[i][0] == final_computed[i][0]:
                     hits_at_n += 1
+            """
 
             for score in final_computed:
                 print(f"%10d %15f" % (score[0], score[1]), end=" ")
@@ -109,11 +124,15 @@ class CompareData:
             print()
 
             hits_at_n /= hits_n
+            mean_hits_at_n += hits_at_n
 
             print(f"Hits at {hits_n} for {self.taxonomy_info[specialty]}:")
             print(hits_at_n)
             print()
 
+        mean_hits_at_n = mean_hits_at_n / top_specialties
+
+        print(f"mean hits at {hits_n}: {mean_hits_at_n}")
 
         if show_lists:
             for specialty in self.provider_specialty_ranking:
@@ -130,6 +149,9 @@ class CompareData:
                     print("None")
                 print()
 
+        specialty_scores = [name[0] for name in specialty_scores]
+        return specialty_scores
+
 """
         for specialty in specialty_scores:
             try:
@@ -145,3 +167,39 @@ class CompareData:
                 print("None")
             print()
 """
+
+
+class EvaluationMethods:
+    def __init__(self, graph):
+        self.graph = graph
+        self.page_rank_scores = {}
+
+    def subgraph_given_specialty(self, specialty):
+        nodes_of_interest = []
+        for node in self.graph.nodes():
+            if specialty in self.graph.nodes[node]["specialties"]:
+                nodes_of_interest.append(node)
+        subgraph = self.graph.subgraph(nodes_of_interest)
+        return subgraph
+
+    def page_rank(self, subgraph:Graph, alpha=0.85, personalization=None,
+                  max_iter=100, tol=1e-06, nstart=None, weight='weight',dangling=None):
+        page_rank_scores = nx.pagerank(subgraph, alpha, personalization,
+                                            max_iter, tol, nstart, weight, dangling)
+        # Print the results
+        """
+        print("PageRank Scores(with edge weights):")
+        for node, score in self.page_rank_scores.items():
+            print(f"Node{node}: {score}")
+        """
+
+        return page_rank_scores
+
+    def page_rank_all_specialties(self, specialties:list, alpha=0.85, personalization=None,
+                  max_iter=100, tol=1e-06, nstart=None, weight='weight',dangling=None):
+        for specialty in specialties:
+            spec_subgraph = self.subgraph_given_specialty(specialty)
+            spec_pr = pagerank(spec_subgraph, alpha, personalization, max_iter, tol,nstart, weight, dangling)
+            self.page_rank_scores[specialty] = spec_pr.items()
+
+        return self.page_rank_scores

@@ -312,18 +312,21 @@ class ProviderConnections:
 
         return node, node_centralities
 
-    def compute_centrality_multiprocessing(self, values_to_consider=5):
+    def compute_centrality_multiprocessing(self, values_to_consider=None):
         """
         get centrality score for each provider
         :param values_to_consider: number of eigenvalues to include in the calculation, (number in most influential)
         :return:
         """
+        if values_to_consider == None:
+            values_to_consider = self.sheaf_laplacian.shape[0] - 1
         print("computing sheaf laplacian energy...")
         start = time.time()
         eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(self.sheaf_laplacian, k=values_to_consider, which="LM")
         sheaf_laplacian_energy = sum(val**2 for val in eigenvalues)
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
         print("computing sheaf laplacian centralities")
+        print(f"time estimation: {(time.time() - start) * len(self.graph.nodes)}")
         pool_args = []
         for node in self.graph.nodes:
             pool_args.append((sheaf_laplacian_energy, node, values_to_consider))
@@ -344,7 +347,6 @@ class ProviderConnections:
 
         end = time.time()
         print(f"energies found in {end - start}")
-        print(self.rankings)
 
     def get_ranking(self):
         """
@@ -380,7 +382,7 @@ class ProviderConnections:
         print("computing all for ranking...")
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centrality_multiprocessing()
+        self.compute_centrality_multiprocessing(values_to_consider=100)
         self.get_ranking()
 
     def add_test_data(self):
@@ -439,7 +441,7 @@ class ProviderConnections:
 
 
 if __name__ == "__main__":
-    pc = ProviderConnections()
+    pc = ProviderConnections(restriction_weights=[1, .5, .1])
     #pc.add_test_data()
     pc.build_graph(rows=1_000)
     pc.compute_all_give_rankings()

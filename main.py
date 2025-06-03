@@ -5,6 +5,7 @@ import csv
 import numpy as np
 import scipy as sp
 import time
+from multiprocessing import Pool
 from data_comparison import CompareData
 
 
@@ -62,7 +63,7 @@ class ProviderConnections:
 
         end = time.time()
 
-        print(f"{lines_read} edges added in {start - end}")
+        print(f"{lines_read} edges added in {end - start}")
 
     def add_specialties_fast(self):
         """
@@ -88,7 +89,7 @@ class ProviderConnections:
 
         end = time.time()
         print(f"{line_count} in reformatted csv")
-        print(f"finished in {start - end}")
+        print(f"finished in {end - start}")
 
         remove_nodes = []
         for node in self.graph.nodes:
@@ -115,7 +116,7 @@ class ProviderConnections:
         self.sheaf_specialty_conversion()
         self.add_provider_totals()
         end = time.time()
-        print(f"graph built in {start - end}")
+        print(f"graph built in {end - start}")
 
     def save_graph(self):
         """
@@ -152,7 +153,7 @@ class ProviderConnections:
             # add to node
             self.graph.nodes[node]["sheaf_vector"] = np.array(num_specialties)
         end = time.time()
-        print(f"specialty numerical finished in {start - end}")
+        print(f"specialty numerical finished in {end - start}")
 
     def add_provider_totals(self):
         """
@@ -183,7 +184,7 @@ class ProviderConnections:
 
         self.coboundary_columns = col
         end = time.time()
-        print(f"totals calculated in {start - end}")
+        print(f"totals calculated in {end - start}")
 
     def compute_coboundary_map(self):
         """
@@ -221,7 +222,7 @@ class ProviderConnections:
 
         self.coboundary_map = coboundary_map
         end = time.time()
-        print(f"coboundary map found in {start - end}")
+        print(f"coboundary map found in {end - start}")
 
         return coboundary_map
 
@@ -240,7 +241,7 @@ class ProviderConnections:
         self.sheaf_laplacian = sheaf_lap
         end = time.time()
 
-        print(f"sheaf laplacian done in {start - end}")
+        print(f"sheaf laplacian done in {end - start}")
 
         return sheaf_lap
 
@@ -286,7 +287,64 @@ class ProviderConnections:
                     self.rankings[specialty_name][node] = centrality
 
         end = time.time()
-        print(f"energies found in {start - end}")
+        print(f"energies found in {end - start}")
+
+    def compute_centrality_multiprocessing_helper(self, sheaf_laplacian_energy, node, values_to_consider=5):
+        node_centralities = []
+        self.graph.nodes[node]["centralities"] = []
+        # for each specialty, get the centrality score
+        for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
+            # have to convert to lil matrix for specialty removal
+            lil_sheaf_laplacian = self.sheaf_laplacian.tolil()
+            # remove specialty (subtract this centrality by initial for centrality of speciality--impact
+            for row in range(lil_sheaf_laplacian.shape[0]):
+                lil_sheaf_laplacian[row, specialty] = 0
+            # convert back for matrix operations
+            spec_removed_sheaf_laplacian = lil_sheaf_laplacian.tocsr()
+            spec_removed_sheaf_laplacian.eliminate_zeros()
+            # eigsh used because matrix is symmetric
+            eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(spec_removed_sheaf_laplacian, k=values_to_consider,
+                                                              which="LM")
+            spec_sheaf_laplacian_energy = sum(val**2 for val in eigenvalues)
+            # centrality (impact) for each specialty of each node
+            centrality = (sheaf_laplacian_energy - spec_sheaf_laplacian_energy) / sheaf_laplacian_energy
+            node_centralities.append(centrality)
+
+        return node, node_centralities
+
+    def compute_centrality_multiprocessing(self, values_to_consider=5):
+        """
+        get centrality score for each provider
+        :param values_to_consider: number of eigenvalues to include in the calculation, (number in most influential)
+        :return:
+        """
+        print("computing sheaf laplacian energy...")
+        start = time.time()
+        eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(self.sheaf_laplacian, k=values_to_consider, which="LM")
+        sheaf_laplacian_energy = sum(val**2 for val in eigenvalues)
+        print(f"sheaf laplacian energy", sheaf_laplacian_energy)
+        print("computing sheaf laplacian centralities")
+        pool_args = []
+        for node in self.graph.nodes:
+            pool_args.append((sheaf_laplacian_energy, node, values_to_consider))
+        with Pool(processes=8) as pool:
+            results = pool.starmap(self.compute_centrality_multiprocessing_helper, pool_args)
+
+        # add results to ranking dict
+        for entry in results:
+            node = entry[0]
+            centralities = entry[1]
+            for specialty, centrality in zip(self.graph.nodes[node]["specialties"], centralities):
+                # add to rankings for specialty
+                if specialty in self.rankings:
+                    self.rankings[specialty][node] = centrality
+                else:
+                    self.rankings[specialty] = {}
+                    self.rankings[specialty][node] = centrality
+
+        end = time.time()
+        print(f"energies found in {end - start}")
+        print(self.rankings)
 
     def get_ranking(self):
         """
@@ -322,7 +380,7 @@ class ProviderConnections:
         print("computing all for ranking...")
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centrality()
+        self.compute_centrality_multiprocessing()
         self.get_ranking()
 
     def add_test_data(self):
@@ -383,7 +441,7 @@ class ProviderConnections:
 if __name__ == "__main__":
     pc = ProviderConnections()
     #pc.add_test_data()
-    pc.build_graph(rows=10_000)
+    pc.build_graph(rows=1_000)
     pc.compute_all_give_rankings()
     #pc.sheaf_laplacian()
     #pc.draw_graph(edge_colors=True, edge_labels=True)

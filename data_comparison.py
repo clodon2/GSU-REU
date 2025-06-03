@@ -35,7 +35,6 @@ class CompareData:
             provider = int(entry[0])
             score = float(entry[1])
             if provider in graph.nodes:
-                print("in")
                 specialties = graph.nodes[provider]["specialties"]
                 for specialty in specialties:
                     if specialty in self.provider_specialty_ranking:
@@ -55,7 +54,6 @@ class CompareData:
         self.add_provider_specialties(graph)
         self.import_taxonomy_info()
         self.sort_scores()
-        print(self.provider_specialty_ranking)
         for specialty in computed_ranking:
             try:
                 print(f"Ranking for {self.taxonomy_info[specialty]}")

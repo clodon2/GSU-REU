@@ -360,7 +360,7 @@ class ProviderConnections:
             values = self.rankings[specialty]
             # reorder to see best provider
             sorted_rankings[specialty] = sorted(values.items(), key=lambda item: item[1], reverse=True)
-        specs = compare.compare(self.graph, sorted_rankings, title="Sheaf Laplacian")
+        specs = compare.compare(self.graph, sorted_rankings, title="Sheaf Laplacian", show_lists=False)
         """
         for specialty in self.rankings:
             print(specialty)
@@ -384,7 +384,7 @@ class ProviderConnections:
         print("computing all for ranking...")
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centrality_multiprocessing(values_to_consider=500)
+        self.compute_centrality_multiprocessing(values_to_consider=None)
         specs = self.get_ranking()
 
         return specs
@@ -450,8 +450,12 @@ if __name__ == "__main__":
     graph = pc.build_graph(rows=1_000)
     spec_names = pc.compute_all_give_rankings()
     ev = EvaluationMethods(graph)
-    eval_specs = ev.page_rank_all_specialties(spec_names)
+    eval_specs_pr = ev.page_rank_all_specialties(spec_names)
+    eval_specs_rl = ev.regular_laplacian(graph)
+    eval_specs_sir = ev.SIR(graph, spec_names)
     eval_compare = CompareData()
-    eval_compare.compare(ev.graph, eval_specs, title="Page Ranking")
+    eval_compare.compare(ev.graph, eval_specs_pr, title="Page Ranking", show_lists=False)
+    eval_compare.compare(ev.graph, eval_specs_rl, title="Regular Laplacian", show_lists=False)
+    eval_compare.compare(ev.graph, eval_specs_sir, title="Susceptible-Infected-Recovered", show_lists=False)
     #pc.sheaf_laplacian()
     #pc.draw_graph(edge_colors=True, edge_labels=True)

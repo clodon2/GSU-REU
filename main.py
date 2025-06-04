@@ -384,7 +384,7 @@ class ProviderConnections:
         print("computing all for ranking...")
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centrality_multiprocessing(values_to_consider=50)
+        self.compute_centrality_multiprocessing(values_to_consider=None)
         specs = self.get_ranking()
 
         return specs
@@ -447,7 +447,7 @@ class ProviderConnections:
 if __name__ == "__main__":
     pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[.8, 1, 1])
     #pc.add_test_data()
-    graph = pc.build_graph(rows=10000)
+    graph = pc.build_graph(rows=1000)
     spec_names = pc.compute_all_give_rankings()
     ev = EvaluationMethods(graph)
     eval_specs_pr = ev.page_rank_all_specialties(spec_names)

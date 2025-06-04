@@ -1,9 +1,10 @@
 import csv
-from networkx import Graph, pagerank
+from networkx import Graph, pagerank, non_edges
 import networkx as nx
 import numpy as np
 from multiprocessing import Pool
 from random import random
+
 
 
 class CompareData:
@@ -129,7 +130,10 @@ class CompareData:
             hits_at_n /= hits_n
             mean_hits_at_n += hits_at_n
 
-            print(f"Hits at {hits_n} for {self.taxonomy_info[specialty]}:")
+            try:
+                print(f"Hits at {hits_n} for {self.taxonomy_info[specialty]}:")
+            except:
+                print(f"Hits at {hits_n} for {specialty}:")
             print(hits_at_n)
             print()
 
@@ -175,6 +179,7 @@ class CompareData:
 class EvaluationMethods:
     def __init__(self, graph):
         self.graph = graph
+        self.laplacian = None
         self.page_rank_scores = {}
 
     def subgraph_given_specialty(self, specialty):
@@ -207,46 +212,41 @@ class EvaluationMethods:
 
         return self.page_rank_scores
 
-    def regular_laplacian_helper(self, subgraph:Graph, laplacian, speciality_energy, node, values_to_consider):
-        node_centralities = []
-        subgraph.nodes[node]["centralities"] = []
-        # for each specialty, get the centrality score
-        for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
-            # have to convert to lil matrix for specialty removal
-            lil_laplacian = laplacian.tolil()
-            # remove specialty (subtract this centrality by initial for centrality of speciality--impact
-            for row in range(lil_laplacian.shape[0]):
-                lil_laplacian[row, specialty] = 0
-            # convert back for matrix operations
-            spec_removed_sheaf_laplacian = lil_laplacian.tocsr()
-            spec_removed_sheaf_laplacian.eliminate_zeros()
-            # eigsh used because matrix is symmetric
-            eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(spec_removed_sheaf_laplacian, k=values_to_consider,
-                                                              which="LM")
-            node_laplacian_energy = sum(val**2 for val in eigenvalues)
-            # centrality (impact) for each specialty of each node
-            centrality = (speciality_energy - node_laplacian_energy) / speciality_energy
-            node_centralities.append(centrality)
-
-        return node, node_centralities
-
-    def regular_laplacian(self, subgraph:Graph):
+    def regular_laplacian_helper(self, node_to_remove, whole_lap_energy):
         # Build degree matrix
-        node_list = list(subgraph.nodes())  # Node list in a fix order
-        degrees = [subgraph.degree(n) for n in node_list]  # Degree sequence
+        node_list = list(self.graph.nodes())
+        node_list.remove(node_to_remove)
+        degrees = [self.graph.degree(n) for n in node_list]
         D = np.diag(degrees)
         # Build the Adjency
-        A = nx.to_numpy_array(subgraph, nodelist=node_list)
+        A = nx.to_numpy_array(self.graph, nodelist=node_list)
+        # remove node laplacian
+        removed_lap = D - A
+
+        eigenvalues, _ = np.linalg.eig(removed_lap)
+        node_remove_energy = sum(val ** 2 for val in eigenvalues)
+
+        return node_to_remove, (whole_lap_energy - node_remove_energy) / whole_lap_energy
+
+
+    def regular_laplacian(self):
+        self.page_rank_scores = None
+        # Build degree matrix
+        node_list = list(self.graph.nodes())
+        degrees = [self.graph.degree(n) for n in node_list]
+        D = np.diag(degrees)
+        # Build the Adjency
+        A = nx.to_numpy_array(self.graph, nodelist=node_list)
         # Regular Lapacian marix
         L = D - A
 
-        eigenvalues, eigenvectors = np.linalg.eig(L)
-
-        speciality_energy = sum(val ** 2 for val in eigenvalues)
+        eigenvalues, _ = np.linalg.eig(L)
+        whole_energy = sum(val ** 2 for val in eigenvalues)
 
         pool_args = []
         for node in self.graph.nodes:
-            pool_args.append((subgraph, L, speciality_energy, node, None))
+            pool_args.append((node, whole_energy))
+
         with Pool(processes=8) as pool:
             results = pool.starmap(self.regular_laplacian_helper, pool_args)
 
@@ -254,8 +254,8 @@ class EvaluationMethods:
         ranking = {}
         for entry in results:
             node = entry[0]
-            centralities = entry[1]
-            for specialty, centrality in zip(subgraph.nodes[node]["specialties"], centralities):
+            centrality = entry[1]
+            for specialty in self.graph.nodes[node]["specialties"]:
                 # add to rankings for specialty
                 if specialty in ranking:
                     ranking[specialty][node] = centrality
@@ -270,11 +270,11 @@ class EvaluationMethods:
     def SIR_step(self, graph:Graph):
         new_infected = []
         for node in graph.nodes:
-            if graph.nodes[node]["state"] == 1:
+            if graph.nodes[node]["sir_state"] == 1:
                 connections = graph[node]
                 for connected_node in connections:
-                    if graph.nodes[connected_node]["state"] == 0:
-                        infection_chance = graph.get_edge_data(node, connected_node)["pair_count"] / graph.nodes[node]["pair_total"]
+                    if graph.nodes[connected_node]["sir_state"] == 0:
+                        infection_chance = int(graph.get_edge_data(node, connected_node)["weight"]) / int(graph.nodes[node]["pair_total"])
                         if random() <= infection_chance:
                             new_infected.append(connected_node)
 
@@ -284,21 +284,22 @@ class EvaluationMethods:
         return len(new_infected)
 
     def SIR(self, graph:Graph, specialities:list):
+        graph = self.graph
         results = {}
         for speciality in specialities:
             results[speciality] = []
             node_choices = []
             for node in graph.nodes:
                 # 0 = susceptible 1 = infected
-                graph.nodes[node]["state"] = 0
-                if speciality in graph.nodes[node][speciality]:
+                graph.nodes[node]["sir_state"] = 0
+                if speciality in graph.nodes[node]["specialties"]:
                     node_choices.append(node)
 
             for infected_node in node_choices:
-                nx.set_node_attributes(graph, 0, "state")
-                graph[infected_node]["state"] = 1
+                nx.set_node_attributes(graph, 0, "sir_state")
+                graph.nodes[infected_node]["sir_state"] = 1
                 total_infected = 0
-                possible_infected = nx.descendants(graph, infected_node)
+                possible_infected = len(nx.descendants(graph, infected_node))
                 for i in range(50):
                     total_infected += self.SIR_step(graph)
                     if total_infected >= possible_infected:

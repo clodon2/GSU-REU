@@ -58,7 +58,15 @@ class CompareData:
         print(f"saving results to {file}...")
         with open(file, "w", newline='') as save_file:
             write = csv.writer(save_file)
-            write.writerow(["n hits", "specialty", "hits at n", "mean hits"])
+            if type(row) == list:
+                write.writerows(row)
+            else:
+                write.writerow(row)
+
+    def append_results(self, file:str, row):
+        print(f"saving results to {file}...")
+        with open(file, "a", newline='') as save_file:
+            write = csv.writer(save_file)
             if type(row) == list:
                 write.writerows(row)
             else:
@@ -72,7 +80,6 @@ class CompareData:
         :return: dict of specialties: spec : value_name: values, mean : mean hits
         """
         output = {}
-        output["specialties"] = {}
         mean_hits_at_n = 0
 
         for specialty in trimmed_rankings:
@@ -88,6 +95,9 @@ class CompareData:
                 for j in final_ranked:
                     if i[0] == j[0]:
                         hits_at_n += 1
+                        # there is something wrong here...should only count once unless duplicate npi
+                        # without break, value increases over 1 for hits@ so need to check rest of code
+                        break
 
             # check if in exact position
             """
@@ -101,7 +111,7 @@ class CompareData:
             # add to total of percentages for mean calculation later
             mean_hits_at_n += hits_at_n
 
-            output[specialty]["hits@n"] = hits_at_n
+            output[specialty] = hits_at_n
 
         # calculate mean hits over all specialties
         mean_hits_at_n = mean_hits_at_n / len(trimmed_rankings.keys())
@@ -129,16 +139,18 @@ class CompareData:
 
             discounted_gain = 0
             for i, distance in enumerate(final_computed_relevancy):
+                i += 1
                 discounted_gain += ( 1 / (distance + 1) ) * log2(i + 1)
 
             ideal_discounted_gain = 0
             for i in range(len(final_computed_relevancy)):
+                i += 1
                 ideal_discounted_gain += log2(i + 1)
 
             normalized_discounted_gain = discounted_gain / ideal_discounted_gain
             output[specialty] = normalized_discounted_gain
 
-        output["mean"] = sum(specialty_score[1] for specialty_score in output.items())
+        output["mean"] = sum(specialty_score[1] for specialty_score in output.items()) / len(trimmed_rankings)
 
         return output
 
@@ -161,8 +173,7 @@ class CompareData:
         specialty_scores = specialty_scores[:n]
         top_specialties_names = [specialty_info[0] for specialty_info in specialty_scores]
 
-        for entry in top_specialties_names:
-            specialty = entry[0]
+        for specialty in top_specialties_names:
             output[specialty] = {}
             final_computed = []
             final_ranked = []
@@ -178,6 +189,7 @@ class CompareData:
             for score in final_ranked:
                 count = final_ranked.count(score)
                 for i in range(count - 1):
+                    print("removed duplicate")
                     final_ranked.remove(score)
 
             for score in final_computed:
@@ -195,7 +207,7 @@ class CompareData:
 
 
     def evaluate_all_and_save(self, graph:Graph, computed_ranking:dict, title="unknonwn",
-                              save_unfiltered=True, hits_n=15, ndcg_n=15, top_specialties=5):
+                              save_unfiltered=True, hits_n=15, ndcg_n=15, top_specialties=5, save_type="new"):
         if save_unfiltered:
             print(f"Saving unfiltered results to ./results/results_unfiltered{title.strip()}.csv...")
             with open(f"./results/results_unfiltered{title.strip()}.csv", "w", newline='') as unfiltered:
@@ -212,10 +224,13 @@ class CompareData:
         trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, top_specialties)
 
         # calculate evaluations
-        hits_at_n = self.evaluate_hits(trimmed_rankings_by_specialty, hits_n)
-        ndcg_at_n = self.evaluate_NDCG(trimmed_rankings_by_specialty, ndcg_n)
-
-        evaluations = [(hits_at_n, "hits@n"), (ndcg_at_n, "NDCG")]
+        evaluations = []
+        if hits_n:
+            hits_at_n = self.evaluate_hits(trimmed_rankings_by_specialty, hits_n)
+            evaluations.append((hits_at_n, f"hits@{hits_n}"))
+        if ndcg_n:
+            ndcg_at_n = self.evaluate_NDCG(trimmed_rankings_by_specialty, ndcg_n)
+            evaluations.append((ndcg_at_n, f"NDCG@{ndcg_n}"))
 
         # save evaluations to file
         save_file_name = f"./results/results{title.strip()}.csv"
@@ -223,18 +238,77 @@ class CompareData:
         save_header = ["eval", "specialty", "score"]
         save_info.append(save_header)
 
-        for eval in evaluations:
-            save_row = [eval[1]]
-            for specialty in eval[0]:
-                save_row.append(specialty)
-                save_row.append(eval[0][specialty])
+        eval = evaluations[0]
+        for specialty in eval[0]:
+            try:
+                specialty_name = self.taxonomy_info[specialty]
+            except:
+                specialty_name = specialty
+            save_row = [eval[1], specialty_name, eval[0][specialty]]
+            for other_eval in evaluations[1:]:
+                save_row.extend([other_eval[1], specialty_name, other_eval[0][specialty]])
             save_info.append(save_row)
 
-        self.save_results(save_file_name, save_info)
+        """
+        for eval in evaluations:
+            for specialty in eval[0]:
+                try:
+                    specialty_name = self.taxonomy_info[specialty]
+                except:
+                    specialty_name = specialty
+                save_row = [eval[1], specialty_name, eval[0][specialty]]
+                save_info.append(save_row)
+        """
 
+        if save_type.lower().strip() == "append":
+            self.append_results(save_file_name, save_info)
+        else:
+            self.save_results(save_file_name, save_info)
+
+    def extract_ranking(self, file:str):
+        with open(file, "r") as extract_file:
+            extract = csv.reader(extract_file)
+            header = next(extract)
+            extracted_dict = {}
+            for row in extract:
+                specialty = row[0]
+                if row[1][:10] == "dict_items":
+                    row[1] = row[1][11:-1]
+                row[1] = row[1].replace("[", " ")
+                row[1] = row[1].replace("]", " ")
+
+                rankings = row[1].split("), ")
+                cleaned_rankings = []
+                for entry in rankings:
+                    entry = entry.strip()
+                    if entry[-1] == ")":
+                        entry = entry[1:-1]
+                    else:
+                        entry = entry[1:]
+                    if entry[12] == "n":
+                        if entry[-1] != ")":
+                            entry += ")"
+                    entry = entry.split(", ")
+                    entry[0] = int(entry[0])
+                    entry[1] = eval(entry[1])
+                    entry = tuple(entry)
+                    cleaned_rankings.append(entry)
+                extracted_dict[specialty] = cleaned_rankings
+
+        return extracted_dict
 
     def compare(self, graph:Graph, computed_ranking:dict, title="unknonwn",
                 show_lists=True, hits_n=15, top_specialties=5):
+        """
+        deprecated due to inflexibility
+        :param graph: graph used for calculations
+        :param computed_ranking: computed ranking of method, formatted specialty: list of (provider, score)
+        :param title: the method type used, prints
+        :param show_lists: prints the raw rankings for actual and computed for all specialties (in actual)
+        :param hits_n: hits at n to evaluate (top n providers in specialty)
+        :param top_specialties: number of specialties to calculate hits at n for, more rankings in actual is prioritized
+        :return:
+        """
         # save raw computed ranking data
         print(f"Saving unfiltered results to ./results/results_unfiltered{title.strip()}.csv...")
         with open(f"./results/results_unfiltered{title.strip()}.csv", "w", newline='') as unfiltered:

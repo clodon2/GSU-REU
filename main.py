@@ -460,52 +460,53 @@ if __name__ == "__main__":
     """
 
     eval_compare = CompareData()
+    eval_compare.setup_evaluate(graph)
     sheaf_lap_data = eval_compare.extract_ranking("./results/results_unfilteredSheaf Laplacian.csv")
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
                                        save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
                                        save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
                                        save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
                                        save_type="append", hits_n=40, ndcg_n=40)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
                                        save_type="append", hits_n=50, ndcg_n=50)
 
     sheaf_lap_data = eval_compare.extract_ranking("./results/results_unfilteredPage Ranking.csv")
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="PRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="PRExtra", save_unfiltered=False,
                                        save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="PRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="PRExtra", save_unfiltered=False,
                                        save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="PRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="PRExtra", save_unfiltered=False,
                                        save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="PRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="PRExtra", save_unfiltered=False,
                                        save_type="append", hits_n=40, ndcg_n=40)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="PRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="PRExtra", save_unfiltered=False,
                                        save_type="append", hits_n=50, ndcg_n=50)
 
     sheaf_lap_data = eval_compare.extract_ranking("./results/results_unfilteredRegular Laplacian.csv")
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="RLExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="RLExtra", save_unfiltered=False,
                                        save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="RLExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="RLExtra", save_unfiltered=False,
                                        save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="RLExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="RLExtra", save_unfiltered=False,
                                        save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="RLExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="RLExtra", save_unfiltered=False,
                                        save_type="append", hits_n=40, ndcg_n=40)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="RLExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="RLExtra", save_unfiltered=False,
                                        save_type="append", hits_n=50, ndcg_n=50)
 
     sheaf_lap_data = eval_compare.extract_ranking("./results/results_unfilteredSusceptible-Infected-Recovered.csv")
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
                                        save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
                                        save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
                                        save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
                                        save_type="append", hits_n=40, ndcg_n=40)
-    eval_compare.evaluate_all_and_save(graph, sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
                                        save_type="append", hits_n=50, ndcg_n=50)
     """
     eval_compare.compare(ev.graph, eval_specs_pr, title="Page Ranking", show_lists=False)

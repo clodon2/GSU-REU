@@ -1,35 +1,35 @@
 eval,specialty,score
-hits@10,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.7,NDCG@10,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.5
-hits@10,Allopathic & Osteopathic Physicians/Internal Medicine,0.3,NDCG@10,Allopathic & Osteopathic Physicians/Internal Medicine,0.36968404866425525
-hits@10,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.2,NDCG@10,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.4549802730973703
-hits@10,Allopathic & Osteopathic Physicians/Emergency Medicine,0.3,NDCG@10,Allopathic & Osteopathic Physicians/Emergency Medicine,0.18941547444846346
-hits@10,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.6,NDCG@10,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.21265426392917205
-hits@10,mean,0.42000000000000004,NDCG@10,mean,0.3453468120278522
+hits@10,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.3,NDCG@10,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.18569905735430084
+hits@10,Allopathic & Osteopathic Physicians/Internal Medicine,0.2,NDCG@10,Allopathic & Osteopathic Physicians/Internal Medicine,0.4032867981913646
+hits@10,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.2,NDCG@10,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.3978088012057569
+hits@10,Allopathic & Osteopathic Physicians/Emergency Medicine,0.2,NDCG@10,Allopathic & Osteopathic Physicians/Emergency Medicine,0.2
+hits@10,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.6,NDCG@10,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.21172612381667902
+hits@10,mean,0.3,NDCG@10,mean,0.27970415611362026
 eval,specialty,score
-hits@20,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.4,NDCG@20,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.427385756843328
-hits@20,Allopathic & Osteopathic Physicians/Internal Medicine,0.55,NDCG@20,Allopathic & Osteopathic Physicians/Internal Medicine,0.22540618321269187
-hits@20,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.6,NDCG@20,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.13668792566333113
-hits@20,Allopathic & Osteopathic Physicians/Emergency Medicine,0.8,NDCG@20,Allopathic & Osteopathic Physicians/Emergency Medicine,0.22341590414562762
-hits@20,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.8,NDCG@20,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.2141733070659527
-hits@20,mean,0.6300000000000001,NDCG@20,mean,0.24541381538618628
+hits@20,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.3,NDCG@20,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.2343260800342215
+hits@20,Allopathic & Osteopathic Physicians/Internal Medicine,0.5,NDCG@20,Allopathic & Osteopathic Physicians/Internal Medicine,0.17655611191396428
+hits@20,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.6,NDCG@20,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.21954758715947686
+hits@20,Allopathic & Osteopathic Physicians/Emergency Medicine,0.8,NDCG@20,Allopathic & Osteopathic Physicians/Emergency Medicine,0.21155493917276927
+hits@20,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.8,NDCG@20,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.26726423203535377
+hits@20,mean,0.6,NDCG@20,mean,0.22184979006315714
 eval,specialty,score
-hits@30,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.43333333333333335,NDCG@30,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.2550233259741357
-hits@30,Allopathic & Osteopathic Physicians/Internal Medicine,0.7,NDCG@30,Allopathic & Osteopathic Physicians/Internal Medicine,0.23470427561060747
-hits@30,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.7666666666666667,NDCG@30,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.11003279720436947
-hits@30,Allopathic & Osteopathic Physicians/Emergency Medicine,0.8,NDCG@30,Allopathic & Osteopathic Physicians/Emergency Medicine,0.1705127886294473
-hits@30,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.8,NDCG@30,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.18121334300121816
-hits@30,mean,0.7,NDCG@30,mean,0.19029730608395562
+hits@30,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.43333333333333335,NDCG@30,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.19296028088500133
+hits@30,Allopathic & Osteopathic Physicians/Internal Medicine,0.6333333333333333,NDCG@30,Allopathic & Osteopathic Physicians/Internal Medicine,0.2173476503321939
+hits@30,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.7666666666666667,NDCG@30,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.1205573746112569
+hits@30,Allopathic & Osteopathic Physicians/Emergency Medicine,0.8,NDCG@30,Allopathic & Osteopathic Physicians/Emergency Medicine,0.12814840042485223
+hits@30,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.8,NDCG@30,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.22124372671147435
+hits@30,mean,0.6866666666666668,NDCG@30,mean,0.17605148659295575
 eval,specialty,score
-hits@40,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.575,NDCG@40,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.15148010527653555
-hits@40,Allopathic & Osteopathic Physicians/Internal Medicine,0.875,NDCG@40,Allopathic & Osteopathic Physicians/Internal Medicine,0.1835391040398793
-hits@40,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.95,NDCG@40,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.10533992308352673
-hits@40,Allopathic & Osteopathic Physicians/Emergency Medicine,0.6,NDCG@40,Allopathic & Osteopathic Physicians/Emergency Medicine,0.1705127886294473
-hits@40,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.6,NDCG@40,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.18121334300121816
-hits@40,mean,0.72,NDCG@40,mean,0.15841705280612142
+hits@40,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.575,NDCG@40,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.13553811502476126
+hits@40,Allopathic & Osteopathic Physicians/Internal Medicine,0.825,NDCG@40,Allopathic & Osteopathic Physicians/Internal Medicine,0.17702751811429976
+hits@40,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.95,NDCG@40,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.10980424030517344
+hits@40,Allopathic & Osteopathic Physicians/Emergency Medicine,0.6,NDCG@40,Allopathic & Osteopathic Physicians/Emergency Medicine,0.1480264132876099
+hits@40,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.6,NDCG@40,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.22961933988865432
+hits@40,mean,0.71,NDCG@40,mean,0.16000312532409974
 eval,specialty,score
-hits@50,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.66,NDCG@50,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.11184238941890452
-hits@50,Allopathic & Osteopathic Physicians/Internal Medicine,0.96,NDCG@50,Allopathic & Osteopathic Physicians/Internal Medicine,0.1584261193908908
-hits@50,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.76,NDCG@50,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.10533992308352673
-hits@50,Allopathic & Osteopathic Physicians/Emergency Medicine,0.48,NDCG@50,Allopathic & Osteopathic Physicians/Emergency Medicine,0.1705127886294473
-hits@50,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.48,NDCG@50,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.18121334300121816
-hits@50,mean,0.6679999999999999,NDCG@50,mean,0.1454669127047975
+hits@50,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.66,NDCG@50,"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",0.11549971780525146
+hits@50,Allopathic & Osteopathic Physicians/Internal Medicine,0.96,NDCG@50,Allopathic & Osteopathic Physicians/Internal Medicine,0.15066783909127915
+hits@50,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.76,NDCG@50,"Allopathic & Osteopathic Physicians/Internal Medicine, Cardiovascular Disease",0.12945158604004875
+hits@50,Allopathic & Osteopathic Physicians/Emergency Medicine,0.48,NDCG@50,Allopathic & Osteopathic Physicians/Emergency Medicine,0.1809747436732342
+hits@50,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.48,NDCG@50,"Allopathic & Osteopathic Physicians/Radiology, Vascular and Interventional Radiology",0.24625493845453517
+hits@50,mean,0.6679999999999999,NDCG@50,mean,0.16456976501286974

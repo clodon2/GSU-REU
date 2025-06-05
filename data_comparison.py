@@ -3,7 +3,7 @@ from networkx import Graph, pagerank, non_edges
 import networkx as nx
 import numpy as np
 from multiprocessing import Pool
-from random import random
+from random import random, shuffle
 from math import log2
 
 
@@ -30,7 +30,10 @@ class CompareData:
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))
-                providers[provider] = True
+                    providers[provider] = score
+                else:
+                    if providers[provider] < score:
+                        providers[provider] = score
 
     def import_taxonomy_info(self):
         with open(self.taxonomy_info_file, "r") as tax_file:
@@ -57,6 +60,12 @@ class CompareData:
         for specialty in self.provider_specialty_ranking:
             values = self.provider_specialty_ranking[specialty]
             self.provider_specialty_ranking[specialty] = sorted(values, key=lambda item: item[1], reverse=True)
+
+    def setup_evaluate(self, graph:Graph):
+        self.import_provider_ranking()
+        self.add_provider_specialties(graph)
+        self.import_taxonomy_info()
+        self.sort_scores()
 
     def save_results(self, file:str, row):
         print(f"saving results to {file}...")
@@ -199,6 +208,10 @@ class CompareData:
                 for i in range(count - 1):
                     final_computed.remove(score)
 
+            # remove biases
+            shuffle(final_ranked)
+            shuffle(final_computed)
+
             final_ranked = sorted(final_ranked, key=lambda item: item[1], reverse=True)
             final_computed = sorted(final_computed, key=lambda item: item[1], reverse=True)
 
@@ -208,7 +221,7 @@ class CompareData:
         return output
 
 
-    def evaluate_all_and_save(self, graph:Graph, computed_ranking:dict, title="unknonwn",
+    def evaluate_all_and_save(self, computed_ranking:dict, title="unknonwn",
                               save_unfiltered=True, hits_n=15, ndcg_n=15, top_specialties=5, save_type="new"):
         if save_unfiltered:
             print(f"Saving unfiltered results to ./results/results_unfiltered{title.strip()}.csv...")
@@ -217,11 +230,6 @@ class CompareData:
                 write.writerow(["key", "rankings"])
                 for key in computed_ranking:
                     write.writerow([key, computed_ranking[key]])
-
-        self.import_provider_ranking()
-        self.add_provider_specialties(graph)
-        self.import_taxonomy_info()
-        self.sort_scores()
 
         trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, top_specialties)
 

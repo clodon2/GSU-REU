@@ -20,13 +20,17 @@ class CompareData:
         with open(self.provider_ranking_file, "r") as rank_file:
             rank_file = csv.reader(rank_file)
             next(rank_file)
+            providers = {}
             for line in rank_file:
                 provider = line[0].strip()
                 if line[11].strip() == '':
                     score = 0
                 else:
                     score = float(line[11].strip())
-                self.provider_ranking.append((int(provider), score))
+                # if duplicate, ignore
+                if provider not in providers:
+                    self.provider_ranking.append((int(provider), score))
+                providers[provider] = True
 
     def import_taxonomy_info(self):
         with open(self.taxonomy_info_file, "r") as tax_file:
@@ -97,7 +101,6 @@ class CompareData:
                         hits_at_n += 1
                         # there is something wrong here...should only count once unless duplicate npi
                         # without break, value increases over 1 for hits@ so need to check rest of code
-                        break
 
             # check if in exact position
             """
@@ -189,7 +192,6 @@ class CompareData:
             for score in final_ranked:
                 count = final_ranked.count(score)
                 for i in range(count - 1):
-                    print("removed duplicate")
                     final_ranked.remove(score)
 
             for score in final_computed:

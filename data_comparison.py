@@ -23,10 +23,10 @@ class CompareData:
             providers = {}
             for line in rank_file:
                 provider = line[0].strip()
-                if line[11].strip() == '':
+                if line[12].strip() == '':
                     score = 0
                 else:
-                    score = float(line[11].strip())
+                    score = float(line[12].strip())
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))
@@ -483,22 +483,6 @@ class EvaluationMethods:
 
         return self.page_rank_scores
 
-    def regular_laplacian_helper(self, node_to_remove, whole_lap_energy):
-        # Build degree matrix
-        node_list = list(self.graph.nodes())
-        node_list.remove(node_to_remove)
-        degrees = [self.graph.degree(n) for n in node_list]
-        D = np.diag(degrees)
-        # Build the Adjency
-        A = nx.to_numpy_array(self.graph, nodelist=node_list)
-        # remove node laplacian
-        removed_lap = D - A
-
-        eigenvalues, _ = np.linalg.eig(removed_lap)
-        node_remove_energy = sum(val ** 2 for val in eigenvalues)
-
-        return node_to_remove, (whole_lap_energy - node_remove_energy) / whole_lap_energy
-
     def get_diagonals(self, csr_mx: sp.sparse.csr_matrix) -> tuple:
         main_diagonal = []
         upper_diagonal = []
@@ -525,15 +509,14 @@ class EvaluationMethods:
         energy = diag + 2 * diag_upp
         return energy
 
-
     def regular_laplacian(self):
         self.page_rank_scores = None
         # Build degree matrix
         node_list = list(self.graph.nodes())
         degrees = [self.graph.degree(n) for n in node_list]
-        D = np.diag(degrees)
+        D = sp.sparse.diags(degrees)
         # Build the Adjency
-        A = nx.to_numpy_array(self.graph, nodelist=node_list)
+        A = nx.to_scipy_sparse_array(self.graph, nodelist=node_list)
         # Regular Lapacian marix
         L = D - A
 
@@ -543,9 +526,8 @@ class EvaluationMethods:
         print("computing laplacian centralities")
         ranking = {}
         for i, node in enumerate(self.graph.nodes):
-            print(f"node {i} of {len(self.graph.nodes)}")
             # Get nonzero row indices and values in specialty column
-            col = specialty
+            col = i
             start_ptr = L.indptr[col]
             end_ptr = L.indptr[col + 1]
             row_indices = L.indices[start_ptr:end_ptr]
@@ -553,7 +535,7 @@ class EvaluationMethods:
             subtract_total = 0
             for value, row in zip(values, row_indices):
                 value = value ** 2
-                if row != specialty:
+                if row != col:
                     value *= 2
                 subtract_total += value
             spec_laplacian_energy = laplacian_energy - subtract_total
@@ -561,56 +543,86 @@ class EvaluationMethods:
             centrality = (laplacian_energy - spec_laplacian_energy) / laplacian_energy
 
             # add to rankings for specialty
-            if specialty_name in ranking:
-                ranking[specialty_name][node] = centrality
-            else:
-                ranking[specialty_name] = {}
-                ranking[specialty_name][node] = centrality
+            for specialty_name in self.graph.nodes[node]["specialties"]:
+                if specialty_name in ranking:
+                    ranking[specialty_name][node] = centrality
+                else:
+                    ranking[specialty_name] = {}
+                    ranking[specialty_name][node] = centrality
 
         for specialty in ranking:
             ranking[specialty] = list(ranking[specialty].items())
 
         return ranking
 
-    def SIR_step(self, graph:Graph):
-        new_infected = []
-        for node in graph.nodes:
-            if graph.nodes[node]["sir_state"] == 1:
-                connections = graph[node]
-                for connected_node in connections:
-                    if graph.nodes[connected_node]["sir_state"] == 0:
-                        infection_chance = int(graph.get_edge_data(node, connected_node)["weight"]) / int(graph.nodes[node]["pair_total"])
-                        if random() <= infection_chance:
-                            new_infected.append(connected_node)
+    def SIR_math(self, specialties:list):
+        for specialty in specialties:
+            total_population = [n for n, attr in self.graph.nodes(data=True) if attr.get('specialty') == specialty]
+            # for all nodes in the specialty, calculate sir value
+            # number of infected = S/N * p * k * D
+            # S=susceptible N=total p=infectionChance k=contacts D=daysInfected I=infected y=recoveryRate=1/D
+            # ds/dt=-(p*k*S*I)/N  di/dt=((p*k*S*I)/N)-yI  dr/dt=yI
+            # ds/dt=susceptibleChange di/dt=infectedChange dr/dt=recoveredChange
+            for node in total_population:
+                pass
 
-        for infected in new_infected:
-            graph.nodes[infected]["state"] = 1
+    def SIR_vectors(self, specialties:list, iterations=50):
+        ranking = {}
+        for specialty in specialties:
+            specialty_nodes = [n for n, attr in self.graph.nodes(data=True) if specialty in attr.get('specialties')]
+            print(specialty_nodes)
 
-        return len(new_infected)
+            for node_number, node in enumerate(specialty_nodes):
+                node_id = node
+                population = nx.node_connected_component(self.graph, node_id)
 
-    def SIR(self, graph:Graph, specialities:list):
-        graph = self.graph
-        results = {}
-        for speciality in specialities:
-            results[speciality] = []
-            node_choices = []
-            for node in graph.nodes:
-                # 0 = susceptible 1 = infected
-                graph.nodes[node]["sir_state"] = 0
-                if speciality in graph.nodes[node]["specialties"]:
-                    node_choices.append(node)
+                # population subgraph
+                population_graph = self.graph.subgraph(population).copy()
 
-            for i, infected_node in enumerate(node_choices):
-                print(f"{i} node of {len(node_choices)}")
-                nx.set_node_attributes(graph, 0, "sir_state")
-                graph.nodes[infected_node]["sir_state"] = 1
-                total_infected = 0
-                possible_infected = len(nx.descendants(graph, infected_node))
-                for i in range(50):
-                    total_infected += self.SIR_step(graph)
-                    if total_infected >= possible_infected:
-                        break
+                adjacency = nx.to_scipy_sparse_array(population_graph)
 
-                results[speciality].append((infected_node, (total_infected / (possible_infected + 1))))
+                # Get the nodes in population_graph
+                population_nodes = list(population_graph.nodes)
+                node_to_idx = {node: idx for idx, node in enumerate(population_nodes)}
+                N = len(population_nodes)
 
-        return results
+                # Initialize states array for this subgraph
+                states = np.zeros(N, dtype=np.int8)
+                states[node_to_idx[node_id]] = 1
+                infection_history = [states.copy()]
+
+                infection_probability_mx = sp.sparse.dok_matrix((N, N))
+
+                for u, v, data in population_graph.edges(data=True):
+                    i = node_to_idx[u]
+                    j = node_to_idx[v]
+                    infection_prob = data.get("weight", 0.2)
+                    infection_probability_mx[i, j] = infection_prob
+                    infection_probability_mx[j, i] = infection_prob
+
+                for time in range(iterations):
+                    infected = (states == 1).astype(np.float32)
+
+                    infected_prob = adjacency @ infected
+
+                    susceptible = (states == 0)
+
+                    rand_vals = np.random.rand(N)
+
+                    infected_neighbors = (rand_vals < infected_prob) & susceptible
+
+                    states[infected_neighbors] = 1
+
+                centrality = len((states == 1).astype(np.float32))
+                # add to rankings for specialty
+                for specialty_name in self.graph.nodes[node_id]["specialties"]:
+                    if specialty_name in ranking:
+                        ranking[specialty_name][node] = centrality
+                    else:
+                        ranking[specialty_name] = {}
+                        ranking[specialty_name][node] = centrality
+
+        for specialty in ranking:
+            ranking[specialty] = list(ranking[specialty].items())
+
+        return ranking

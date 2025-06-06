@@ -330,6 +330,7 @@ class ProviderConnections:
         :return:
         """
         print("computing all for ranking...")
+        self.sheaf_specialty_conversion()
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
         self.compute_centralities()
@@ -392,6 +393,34 @@ class ProviderConnections:
                          edge_color=weights, edge_cmap=color_map, edge_vmin=0, edge_vmax=max_weight)
         plt.show()
 
+def eval_sheaf_lap():
+    pc = ProviderConnections(primary_specialty_weight=1.4, restriction_weights=[1, 4, 1])
+    graph = pc.build_graph(rows=1000)
+    eval_compare = CompareData()
+    eval_compare.setup_evaluate(graph)
+    sheaf_laplacian_rankings = pc.compute_all_give_rankings()
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+                                       save_type="write", hits_n=10, ndcg_n=10)
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+                                       save_type="append", hits_n=20, ndcg_n=20)
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+                                       save_type="append", hits_n=30, ndcg_n=30)
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+                                       save_type="append", hits_n=40, ndcg_n=40)
+
+    pc.restriction_weights = [1, .1, .05]
+    pc.primary_specialty_weight = 1.9
+    sheaf_laplacian_rankings = pc.compute_all_give_rankings()
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianC", save_unfiltered=True,
+                                       save_type="write", hits_n=10, ndcg_n=10)
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianC", save_unfiltered=True,
+                                       save_type="append", hits_n=20, ndcg_n=20)
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianC", save_unfiltered=True,
+                                       save_type="append", hits_n=30, ndcg_n=30)
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianC", save_unfiltered=True,
+                                       save_type="append", hits_n=40, ndcg_n=40)
+
+
 def compare_weights():
     pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[1, 1, 1])
     graph = pc.build_graph(rows=1000)
@@ -409,8 +438,8 @@ def compare_weights():
 
     for j in range(3):
         if j > 0:
-            pc. restriction_weights[j - 1] += .8
-        pc.restriction_weights[j] -= .8
+            pc. restriction_weights[j - 1] -= .8
+        pc.restriction_weights[j] += .8
         print(pc.restriction_weights)
         sheaf_laplacian_rankings = pc.compute_all_give_rankings()
 
@@ -426,8 +455,8 @@ def compare_weights():
                                                    save_type="append", hits_n=i, ndcg_n=i)
 
 def evaluate_all_methods():
-    pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[1, 1, 1])
-    graph = pc.build_graph(rows=1000)
+    pc = ProviderConnections(primary_specialty_weight=1.9, restriction_weights=[1, .1, .05])
+    graph = pc.build_graph(rows=100000)
     sheaf_laplacian_rankings = pc.compute_all_give_rankings()
     specialty_names = list(sheaf_laplacian_rankings.keys())
 
@@ -439,12 +468,13 @@ def evaluate_all_methods():
     print("page ranking...")
     rankings_pr = ev.page_rank_all_specialties(specialty_names)
     print("regular laplacian...")
-    #rankings_rl = ev.regular_laplacian()
+    rankings_rl = ev.regular_laplacian()
     print("SIR...")
-    #rankings_sir = ev.SIR(graph, specialty_names)
+    #rankings_sir = ev.SIR_vectors(specialty_names)
     print("evaluating...")
 
-    method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank")]
+    method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"),
+                       (rankings_rl, "RegularLaplacian")]
 
     for method_info in method_rankings:
         ranking = method_info[0]
@@ -457,39 +487,9 @@ def evaluate_all_methods():
 
 
 if __name__ == "__main__":
-    compare_weights()
+    evaluate_all_methods()
     #pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[.8, 1, 1])
     #pc.add_test_data()
 
     #graph = pc.build_graph(rows=1000)
     #spec_names = pc.compute_all_give_rankings()
-
-    """
-    ev = EvaluationMethods(graph)
-    
-    eval_specs_pr = ev.page_rank_all_specialties(spec_names)
-    eval_specs_rl = ev.regular_laplacian()
-    eval_specs_sir = ev.SIR(graph, spec_names)
-    
-
-    eval_compare = CompareData()
-    eval_compare.setup_evaluate(graph)
-    sheaf_lap_data = pc.rankings
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
-                                       save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=40, ndcg_n=40)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=50, ndcg_n=50)
-    """
-    """
-    eval_compare.compare(ev.graph, eval_specs_pr, title="Page Ranking", show_lists=False)
-    eval_compare.compare(ev.graph, eval_specs_rl, title="Regular Laplacian", show_lists=False)
-    eval_compare.compare(ev.graph, eval_specs_sir, title="Susceptible-Infected-Recovered", show_lists=False)
-    """
-    #pc.sheaf_laplacian()
-    #pc.draw_graph(edge_colors=True, edge_labels=True)

@@ -246,110 +246,6 @@ class ProviderConnections:
 
         return sheaf_lap
 
-    def compute_centrality(self, values_to_consider=5):
-        """
-        get centrality score for each provider
-        :param values_to_consider: number of eigenvalues to include in the calculation, (number in most influential)
-        :return:
-        """
-        print("computing sheaf laplacian energy...")
-        start = time.time()
-        eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(self.sheaf_laplacian, k=values_to_consider, which="LM")
-        sheaf_laplacian_energy = sum(val**2 for val in eigenvalues)
-        print(f"sheaf laplacian energy", sheaf_laplacian_energy)
-        print("computing sheaf laplacian centralities")
-        for i, node in enumerate(self.graph.nodes):
-            self.graph.nodes[node]["centralities"] = []
-            print(f"node {i} of {len(self.graph.nodes)}")
-            # for each specialty, get the centrality score
-            for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
-                # have to convert to lil matrix for specialty removal
-                lil_sheaf_laplacian = self.sheaf_laplacian.tolil()
-                # remove specialty (subtract this centrality by initial for centrality of speciality--impact
-                for row in range(lil_sheaf_laplacian.shape[0]):
-                    lil_sheaf_laplacian[row, specialty] = 0
-                # convert back for matrix operations
-                spec_removed_sheaf_laplacian = lil_sheaf_laplacian.tocsr()
-                spec_removed_sheaf_laplacian.eliminate_zeros()
-                # eigsh used because matrix is symmetric
-                eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(spec_removed_sheaf_laplacian, k=values_to_consider,
-                                                                  which="LM")
-                spec_sheaf_laplacian_energy = sum(val**2 for val in eigenvalues)
-                # centrality (impact) for each specialty of each node
-                centrality = (sheaf_laplacian_energy - spec_sheaf_laplacian_energy) / sheaf_laplacian_energy
-                # can probs remove this storage
-                self.graph.nodes[node]["centralities"].append(centrality)
-
-                # add to rankings for specialty
-                if specialty_name in self.rankings:
-                    self.rankings[specialty_name][node] = centrality
-                else:
-                    self.rankings[specialty_name] = {}
-                    self.rankings[specialty_name][node] = centrality
-
-        end = time.time()
-        print(f"energies found in {end - start}")
-
-    def compute_centrality_multiprocessing_helper(self, sheaf_laplacian_energy, node, values_to_consider=5):
-        node_centralities = []
-        self.graph.nodes[node]["centralities"] = []
-        # for each specialty, get the centrality score
-        for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
-            # have to convert to lil matrix for specialty removal
-            lil_sheaf_laplacian = self.sheaf_laplacian.tolil()
-            # remove specialty (subtract this centrality by initial for centrality of speciality--impact
-            for row in range(lil_sheaf_laplacian.shape[0]):
-                lil_sheaf_laplacian[row, specialty] = 0
-                lil_sheaf_laplacian[specialty, row] = 0
-            # convert back for matrix operations
-            spec_removed_sheaf_laplacian = lil_sheaf_laplacian.tocsr()
-            spec_removed_sheaf_laplacian.eliminate_zeros()
-            # eigsh used because matrix is symmetric
-            eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(spec_removed_sheaf_laplacian, k=values_to_consider,
-                                                              which="LM")
-            spec_sheaf_laplacian_energy = sum(val**2 for val in eigenvalues)
-            # centrality (impact) for each specialty of each node
-            centrality = (sheaf_laplacian_energy - spec_sheaf_laplacian_energy) / sheaf_laplacian_energy
-            node_centralities.append(centrality)
-
-        return node, node_centralities
-
-    def compute_centrality_multiprocessing(self, values_to_consider=None):
-        """
-        get centrality score for each provider
-        :param values_to_consider: number of eigenvalues to include in the calculation, (number in most influential)
-        :return:
-        """
-        if values_to_consider == None:
-            values_to_consider = self.sheaf_laplacian.shape[0] - 1
-        print("computing sheaf laplacian energy...")
-        start = time.time()
-        eigenvalues, eigenvectors = sp.sparse.linalg.eigsh(self.sheaf_laplacian, k=values_to_consider, which="LM")
-        sheaf_laplacian_energy = sum(val**2 for val in eigenvalues)
-        print(f"sheaf laplacian energy", sheaf_laplacian_energy)
-        print("computing sheaf laplacian centralities")
-        print(f"time estimation: {(time.time() - start) * len(self.graph.nodes)}")
-        pool_args = []
-        for node in self.graph.nodes:
-            pool_args.append((sheaf_laplacian_energy, node, values_to_consider))
-        with Pool(processes=8) as pool:
-            results = pool.starmap(self.compute_centrality_multiprocessing_helper, pool_args)
-
-        # add results to ranking dict
-        for entry in results:
-            node = entry[0]
-            centralities = entry[1]
-            for specialty, centrality in zip(self.graph.nodes[node]["specialties"], centralities):
-                # add to rankings for specialty
-                if specialty in self.rankings:
-                    self.rankings[specialty][node] = centrality
-                else:
-                    self.rankings[specialty] = {}
-                    self.rankings[specialty][node] = centrality
-
-        end = time.time()
-        print(f"energies found in {end - start}")
-
     def get_diagonals(self, csr_mx: sp.sparse.csr_matrix) -> tuple:
         main_diagonal = []
         upper_diagonal = []
@@ -362,7 +258,7 @@ class ProviderConnections:
                 upper_diagonal.append((i, j, csr_mx[i, j]))  # Element above the diagonal
         return main_diagonal, upper_diagonal
 
-    def compute_sheaf_laplacian_energy_faster(self, coboundary_map: sp.sparse.csr_matrix) -> float:
+    def compute_sheaf_laplacian_energy(self, coboundary_map: sp.sparse.csr_matrix) -> float:
         main_diagonal, upper_diagonal = self.get_diagonals(coboundary_map)
         # Compute d
         diag = 0
@@ -376,45 +272,10 @@ class ProviderConnections:
         energy = diag + 2 * diag_upp
         return energy
 
-    def compute_centralities_faster(self):
-        print("computing sheaf laplacian energy (new)...")
-        start = time.time()
-        sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy_faster(self.sheaf_laplacian)
-        print(f"sheaf laplacian energy (new)", sheaf_laplacian_energy)
-        print("computing sheaf laplacian centralities (new)")
-        for i, node in enumerate(self.graph.nodes):
-            self.graph.nodes[node]["centralities"] = []
-            print(f"node {i} of {len(self.graph.nodes)}")
-            # for each specialty, get the centrality score
-            for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
-                # have to convert to lil matrix for specialty removal
-                lil_sheaf_laplacian = self.sheaf_laplacian.tolil()
-                # remove specialty (subtract this centrality by initial for centrality of speciality--impact
-                for row in range(lil_sheaf_laplacian.shape[0]):
-                    lil_sheaf_laplacian[row, specialty] = 0
-                    lil_sheaf_laplacian[specialty, row] = 0
-                # convert back for matrix operations
-                spec_removed_sheaf_laplacian = lil_sheaf_laplacian.tocsr()
-                spec_sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy_faster(spec_removed_sheaf_laplacian)
-                # centrality (impact) for each specialty of each node
-                centrality = (sheaf_laplacian_energy - spec_sheaf_laplacian_energy) / sheaf_laplacian_energy
-                # can probs remove this storage
-                self.graph.nodes[node]["centralities"].append(centrality)
-
-                # add to rankings for specialty
-                if specialty_name in self.rankings:
-                    self.rankings[specialty_name][node] = centrality
-                else:
-                    self.rankings[specialty_name] = {}
-                    self.rankings[specialty_name][node] = centrality
-
-        end = time.time()
-        print(f"energies found in {end - start}")
-
-    def compute_centralities_fastest(self):
+    def compute_centralities(self):
         print("computing sheaf laplacian energy...")
         start = time.time()
-        sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy_faster(self.sheaf_laplacian)
+        sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
         self.sheaf_laplacian.tocsc()
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
         print("computing sheaf laplacian centralities")
@@ -471,7 +332,7 @@ class ProviderConnections:
         print("computing all for ranking...")
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centralities_fastest()
+        self.compute_centralities()
         #self.compute_centrality_multiprocessing(values_to_consider=None)
         ranking = self.get_ranking()
 

@@ -300,6 +300,7 @@ class ProviderConnections:
             # remove specialty (subtract this centrality by initial for centrality of speciality--impact
             for row in range(lil_sheaf_laplacian.shape[0]):
                 lil_sheaf_laplacian[row, specialty] = 0
+                lil_sheaf_laplacian[specialty, row] = 0
             # convert back for matrix operations
             spec_removed_sheaf_laplacian = lil_sheaf_laplacian.tocsr()
             spec_removed_sheaf_laplacian.eliminate_zeros()
@@ -349,32 +350,118 @@ class ProviderConnections:
         end = time.time()
         print(f"energies found in {end - start}")
 
+    def get_diagonals(self, csr_mx: sp.sparse.csr_matrix) -> tuple:
+        main_diagonal = []
+        upper_diagonal = []
+        # Access the non-zero elements using row, column, and data
+        row, col = csr_mx.nonzero()
+        for i, j in zip(row, col):
+            if i == j:
+                main_diagonal.append((i, j, csr_mx[i, j]))  # Element at (i, i)
+            elif i < j:
+                upper_diagonal.append((i, j, csr_mx[i, j]))  # Element above the diagonal
+        return main_diagonal, upper_diagonal
+
+    def compute_sheaf_laplacian_energy_faster(self, coboundary_map: sp.sparse.csr_matrix) -> float:
+        main_diagonal, upper_diagonal = self.get_diagonals(coboundary_map)
+        # Compute d
+        diag = 0
+        for _, _, val in main_diagonal:
+            diag += val ** 2
+        # Compute w_upp
+        diag_upp = 0
+        for _, _, val in upper_diagonal:
+            diag_upp += val ** 2
+        # Laplacian energy
+        energy = diag + 2 * diag_upp
+        return energy
+
+    def compute_centralities_faster(self):
+        print("computing sheaf laplacian energy (new)...")
+        start = time.time()
+        sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy_faster(self.sheaf_laplacian)
+        print(f"sheaf laplacian energy (new)", sheaf_laplacian_energy)
+        print("computing sheaf laplacian centralities (new)")
+        for i, node in enumerate(self.graph.nodes):
+            self.graph.nodes[node]["centralities"] = []
+            print(f"node {i} of {len(self.graph.nodes)}")
+            # for each specialty, get the centrality score
+            for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
+                # have to convert to lil matrix for specialty removal
+                lil_sheaf_laplacian = self.sheaf_laplacian.tolil()
+                # remove specialty (subtract this centrality by initial for centrality of speciality--impact
+                for row in range(lil_sheaf_laplacian.shape[0]):
+                    lil_sheaf_laplacian[row, specialty] = 0
+                    lil_sheaf_laplacian[specialty, row] = 0
+                # convert back for matrix operations
+                spec_removed_sheaf_laplacian = lil_sheaf_laplacian.tocsr()
+                spec_sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy_faster(spec_removed_sheaf_laplacian)
+                # centrality (impact) for each specialty of each node
+                centrality = (sheaf_laplacian_energy - spec_sheaf_laplacian_energy) / sheaf_laplacian_energy
+                # can probs remove this storage
+                self.graph.nodes[node]["centralities"].append(centrality)
+
+                # add to rankings for specialty
+                if specialty_name in self.rankings:
+                    self.rankings[specialty_name][node] = centrality
+                else:
+                    self.rankings[specialty_name] = {}
+                    self.rankings[specialty_name][node] = centrality
+
+        end = time.time()
+        print(f"energies found in {end - start}")
+
+    def compute_centralities_fastest(self):
+        print("computing sheaf laplacian energy...")
+        start = time.time()
+        sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy_faster(self.sheaf_laplacian)
+        self.sheaf_laplacian.tocsc()
+        print(f"sheaf laplacian energy", sheaf_laplacian_energy)
+        print("computing sheaf laplacian centralities")
+        for i, node in enumerate(self.graph.nodes):
+            self.graph.nodes[node]["centralities"] = []
+            print(f"node {i} of {len(self.graph.nodes)}")
+            # for each specialty, get the centrality score
+            for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
+                # Get nonzero row indices and values in specialty column
+                col = specialty
+                start_ptr = self.sheaf_laplacian.indptr[col]
+                end_ptr = self.sheaf_laplacian.indptr[col + 1]
+                row_indices = self.sheaf_laplacian.indices[start_ptr:end_ptr]
+                values = self.sheaf_laplacian.data[start_ptr:end_ptr]
+                subtract_total = 0
+                for value, row in zip(values, row_indices):
+                    value = value ** 2
+                    if row != specialty:
+                        value *= 2
+                    subtract_total += value
+                spec_sheaf_laplacian_energy = sheaf_laplacian_energy - subtract_total
+                # centrality (impact) for each specialty of each node
+                centrality = (sheaf_laplacian_energy - spec_sheaf_laplacian_energy) / sheaf_laplacian_energy
+                # can probs remove this storage
+                self.graph.nodes[node]["centralities"].append(centrality)
+
+                # add to rankings for specialty
+                if specialty_name in self.rankings:
+                    self.rankings[specialty_name][node] = centrality
+                else:
+                    self.rankings[specialty_name] = {}
+                    self.rankings[specialty_name][node] = centrality
+
+        end = time.time()
+        print(f"energies found in {end - start}")
+
     def get_ranking(self):
         """
         get rankings of providers based on specialties
         :return:
         """
-        compare = CompareData()
         sorted_rankings = {}
         for specialty in self.rankings:
             values = self.rankings[specialty]
             # reorder to see best provider
             sorted_rankings[specialty] = sorted(values.items(), key=lambda item: item[1], reverse=True)
-        specs = compare.compare(self.graph, sorted_rankings, title="Sheaf Laplacian", show_lists=False)
-        """
-        for specialty in self.rankings:
-            print(specialty)
-            values = self.rankings[specialty]
-            # reorder to see best provider
-            sorted_rankings = sorted(values.items(), key=lambda item: item[1])
-            np.set_printoptions(suppress=True)
-            # round (useless rn)
-            readable_rankings = []
-            for t in sorted_rankings:
-                readable_rankings.append((t[0], round(t[1], 8)))
-            print(readable_rankings)
-        """
-        return specs
+        return sorted_rankings
 
     def compute_all_give_rankings(self):
         """
@@ -384,10 +471,11 @@ class ProviderConnections:
         print("computing all for ranking...")
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centrality_multiprocessing(values_to_consider=None)
-        specs = self.get_ranking()
+        self.compute_centralities_fastest()
+        #self.compute_centrality_multiprocessing(values_to_consider=None)
+        ranking = self.get_ranking()
 
-        return specs
+        return ranking
 
     def add_test_data(self):
         test_edges = [("v1", "v2"), ("v3", "v2"), ("v3", "v4"), ("v1", "v4")]
@@ -443,71 +531,100 @@ class ProviderConnections:
                          edge_color=weights, edge_cmap=color_map, edge_vmin=0, edge_vmax=max_weight)
         plt.show()
 
-
-if __name__ == "__main__":
-    pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[.8, 1, 1])
-    #pc.add_test_data()
-
+def compare_weights():
+    pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[1, 1, 1])
     graph = pc.build_graph(rows=1000)
-    #spec_names = pc.compute_all_give_rankings()
+    eval_compare = CompareData()
+    eval_compare.setup_evaluate(graph)
+    sheaf_laplacian_rankings = pc.compute_all_give_rankings()
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+                                       save_type="write", hits_n=10, ndcg_n=10)
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+                                       save_type="append", hits_n=20, ndcg_n=20)
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+                                       save_type="append", hits_n=30, ndcg_n=30)
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+                                       save_type="append", hits_n=40, ndcg_n=40)
 
+    for j in range(3):
+        if j > 0:
+            pc. restriction_weights[j - 1] += .8
+        pc.restriction_weights[j] -= .8
+        print(pc.restriction_weights)
+        sheaf_laplacian_rankings = pc.compute_all_give_rankings()
 
-    ev = EvaluationMethods(graph)
-    """
-    eval_specs_pr = ev.page_rank_all_specialties(spec_names)
-    eval_specs_rl = ev.regular_laplacian()
-    eval_specs_sir = ev.SIR(graph, spec_names)
-    """
+        method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian")]
+
+        for method_info in method_rankings:
+            ranking = method_info[0]
+            title = method_info[1]
+            eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=True,
+                                               save_type="append", hits_n=10, ndcg_n=10)
+            for i in range(20, 50, 10):
+                eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
+                                                   save_type="append", hits_n=i, ndcg_n=i)
+
+def evaluate_all_methods():
+    pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[1, 1, 1])
+    graph = pc.build_graph(rows=1000)
+    sheaf_laplacian_rankings = pc.compute_all_give_rankings()
+    specialty_names = list(sheaf_laplacian_rankings.keys())
 
     eval_compare = CompareData()
     eval_compare.setup_evaluate(graph)
-    sheaf_lap_data = eval_compare.extract_ranking("./results/results_unfilteredSheaf Laplacian.csv")
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
-                                       save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=40, ndcg_n=40)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=50, ndcg_n=50)
 
-    sheaf_lap_data = eval_compare.extract_ranking("./results/results_unfilteredPage Ranking.csv")
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="PRExtra", save_unfiltered=False,
-                                       save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="PRExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="PRExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="PRExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=40, ndcg_n=40)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="PRExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=50, ndcg_n=50)
+    ev = EvaluationMethods(graph)
 
-    sheaf_lap_data = eval_compare.extract_ranking("./results/results_unfilteredRegular Laplacian.csv")
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="RLExtra", save_unfiltered=False,
-                                       save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="RLExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="RLExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="RLExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=40, ndcg_n=40)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="RLExtra", save_unfiltered=False,
-                                       save_type="append", hits_n=50, ndcg_n=50)
+    print("page ranking...")
+    rankings_pr = ev.page_rank_all_specialties(specialty_names)
+    print("regular laplacian...")
+    #rankings_rl = ev.regular_laplacian()
+    print("SIR...")
+    #rankings_sir = ev.SIR(graph, specialty_names)
+    print("evaluating...")
 
-    sheaf_lap_data = eval_compare.extract_ranking("./results/results_unfilteredSusceptible-Infected-Recovered.csv")
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
+    method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank")]
+
+    for method_info in method_rankings:
+        ranking = method_info[0]
+        title = method_info[1]
+        eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=True,
                                        save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
+        for i in range(20, 50, 10):
+            eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
+                                               save_type="append", hits_n=i, ndcg_n=i)
+
+
+if __name__ == "__main__":
+    compare_weights()
+    #pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[.8, 1, 1])
+    #pc.add_test_data()
+
+    #graph = pc.build_graph(rows=1000)
+    #spec_names = pc.compute_all_give_rankings()
+
+    """
+    ev = EvaluationMethods(graph)
+    
+    eval_specs_pr = ev.page_rank_all_specialties(spec_names)
+    eval_specs_rl = ev.regular_laplacian()
+    eval_specs_sir = ev.SIR(graph, spec_names)
+    
+
+    eval_compare = CompareData()
+    eval_compare.setup_evaluate(graph)
+    sheaf_lap_data = pc.rankings
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
+                                       save_type="write", hits_n=10, ndcg_n=10)
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
                                        save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
                                        save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
                                        save_type="append", hits_n=40, ndcg_n=40)
-    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SIRExtra", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_lap_data, title="SheafLapExtra", save_unfiltered=False,
                                        save_type="append", hits_n=50, ndcg_n=50)
+    """
     """
     eval_compare.compare(ev.graph, eval_specs_pr, title="Page Ranking", show_lists=False)
     eval_compare.compare(ev.graph, eval_specs_rl, title="Regular Laplacian", show_lists=False)

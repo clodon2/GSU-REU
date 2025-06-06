@@ -2,7 +2,7 @@ import csv
 from networkx import Graph, pagerank, non_edges
 import networkx as nx
 import numpy as np
-from multiprocessing import Pool
+import scipy as sp
 from random import random, shuffle
 from math import log2
 
@@ -149,6 +149,10 @@ class CompareData:
                         final_computed_relevancy.append(abs(j - i))
                         break
 
+            if not final_computed_relevancy:
+                output[specialty] = 0
+                continue
+
             discounted_gain = 0
             for i, distance in enumerate(final_computed_relevancy):
                 i += 1
@@ -209,7 +213,6 @@ class CompareData:
                     final_computed.remove(score)
 
             # remove biases
-            shuffle(final_ranked)
             shuffle(final_computed)
 
             final_ranked = sorted(final_ranked, key=lambda item: item[1], reverse=True)
@@ -496,6 +499,32 @@ class EvaluationMethods:
 
         return node_to_remove, (whole_lap_energy - node_remove_energy) / whole_lap_energy
 
+    def get_diagonals(self, csr_mx: sp.sparse.csr_matrix) -> tuple:
+        main_diagonal = []
+        upper_diagonal = []
+        # Access the non-zero elements using row, column, and data
+        row, col = csr_mx.nonzero()
+        for i, j in zip(row, col):
+            if i == j:
+                main_diagonal.append((i, j, csr_mx[i, j]))  # Element at (i, i)
+            elif i < j:
+                upper_diagonal.append((i, j, csr_mx[i, j]))  # Element above the diagonal
+        return main_diagonal, upper_diagonal
+
+    def compute_laplacian_energy(self, laplacian: sp.sparse.csr_matrix) -> float:
+        main_diagonal, upper_diagonal = self.get_diagonals(laplacian)
+        # Compute d
+        diag = 0
+        for _, _, val in main_diagonal:
+            diag += val ** 2
+        # Compute w_upp
+        diag_upp = 0
+        for _, _, val in upper_diagonal:
+            diag_upp += val ** 2
+        # Laplacian energy
+        energy = diag + 2 * diag_upp
+        return energy
+
 
     def regular_laplacian(self):
         self.page_rank_scores = None
@@ -508,31 +537,39 @@ class EvaluationMethods:
         # Regular Lapacian marix
         L = D - A
 
-        eigenvalues, _ = np.linalg.eig(L)
-        whole_energy = sum(val ** 2 for val in eigenvalues)
-
-        pool_args = []
-        for node in self.graph.nodes:
-            pool_args.append((node, whole_energy))
-
-        with Pool(processes=8) as pool:
-            results = pool.starmap(self.regular_laplacian_helper, pool_args)
-
-        # add results to ranking dict
+        L = sp.sparse.csr_matrix(L)
+        laplacian_energy = self.compute_laplacian_energy(L)
+        print(f"reg laplacian energy", laplacian_energy)
+        print("computing laplacian centralities")
         ranking = {}
-        for entry in results:
-            node = entry[0]
-            centrality = entry[1]
-            for specialty in self.graph.nodes[node]["specialties"]:
-                # add to rankings for specialty
-                if specialty in ranking:
-                    ranking[specialty][node] = centrality
-                else:
-                    ranking[specialty] = {}
-                    ranking[specialty][node] = centrality
+        for i, node in enumerate(self.graph.nodes):
+            print(f"node {i} of {len(self.graph.nodes)}")
+            # Get nonzero row indices and values in specialty column
+            col = specialty
+            start_ptr = L.indptr[col]
+            end_ptr = L.indptr[col + 1]
+            row_indices = L.indices[start_ptr:end_ptr]
+            values = L.data[start_ptr:end_ptr]
+            subtract_total = 0
+            for value, row in zip(values, row_indices):
+                value = value ** 2
+                if row != specialty:
+                    value *= 2
+                subtract_total += value
+            spec_laplacian_energy = laplacian_energy - subtract_total
+            # centrality (impact) for each specialty of each node
+            centrality = (laplacian_energy - spec_laplacian_energy) / laplacian_energy
+
+            # add to rankings for specialty
+            if specialty_name in ranking:
+                ranking[specialty_name][node] = centrality
+            else:
+                ranking[specialty_name] = {}
+                ranking[specialty_name][node] = centrality
 
         for specialty in ranking:
-            ranking[specialty] = ranking[specialty].items()
+            ranking[specialty] = list(ranking[specialty].items())
+
         return ranking
 
     def SIR_step(self, graph:Graph):
@@ -563,7 +600,8 @@ class EvaluationMethods:
                 if speciality in graph.nodes[node]["specialties"]:
                     node_choices.append(node)
 
-            for infected_node in node_choices:
+            for i, infected_node in enumerate(node_choices):
+                print(f"{i} node of {len(node_choices)}")
                 nx.set_node_attributes(graph, 0, "sir_state")
                 graph.nodes[infected_node]["sir_state"] = 1
                 total_infected = 0
@@ -573,6 +611,6 @@ class EvaluationMethods:
                     if total_infected >= possible_infected:
                         break
 
-                results[speciality].append((infected_node, (total_infected / possible_infected)))
+                results[speciality].append((infected_node, (total_infected / (possible_infected + 1))))
 
         return results

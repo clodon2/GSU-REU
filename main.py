@@ -264,18 +264,7 @@ class ProviderConnections:
         return main_diagonal, upper_diagonal
 
     def compute_sheaf_laplacian_energy(self, coboundary_map: sp.sparse.csr_matrix) -> float:
-        main_diagonal, upper_diagonal = self.get_diagonals(coboundary_map)
-        # Compute d
-        diag = 0
-        for _, _, val in main_diagonal:
-            diag += val ** 2
-        # Compute w_upp
-        diag_upp = 0
-        for _, _, val in upper_diagonal:
-            diag_upp += val ** 2
-        # Laplacian energy
-        energy = diag + 2 * diag_upp
-        return energy
+        return np.sum(coboundary_map.data ** 2)
 
     def compute_centralities(self):
         print("computing sheaf laplacian energy...")
@@ -323,6 +312,56 @@ class ProviderConnections:
         end = time.time()
         print(f"energies found in {end - start}")
 
+    def compute_centralities_multiprocessing_helper(self, sheaf_laplacian_energy, node, original_coboundary, i):
+        print(f"node {i} of {len(self.graph.nodes)}")
+        node_centralities = []
+        # for each specialty, get the centrality score
+        for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
+            self.coboundary_map[:, specialty] = 0
+            for row in self.graph.nodes[node]["edge_indices"]:
+                self.coboundary_map.rows[row] = []
+                self.coboundary_map.data[row] = []
+            coboundary_csr = self.coboundary_map.tocsr()
+            self.sheaf_laplacian = coboundary_csr.transpose().dot(original_coboundary)
+            spec_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
+            spec_sheaf_laplacian_energy = sheaf_laplacian_energy - spec_energy
+            # centrality (impact) for each specialty of each node
+            centrality = (sheaf_laplacian_energy - spec_sheaf_laplacian_energy) / sheaf_laplacian_energy
+
+            node_centralities.append(centrality)
+
+        return node, node_centralities
+
+    def compute_centralities_multiprocessing(self):
+        print("computing sheaf laplacian energy...")
+        start = time.time()
+        sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
+        self.sheaf_laplacian.tocsc()
+        print(f"sheaf laplacian energy", sheaf_laplacian_energy)
+        print("computing sheaf laplacian centralities")
+        originial_coboundary = self.coboundary_map.copy()
+        self.coboundary_map = self.coboundary_map.tolil()
+        pool_args = []
+        for i, node in enumerate(self.graph.nodes):
+            pool_args.append((sheaf_laplacian_energy, node, originial_coboundary, i))
+        with Pool(processes=4) as pool:
+            results = pool.starmap(self.compute_centralities_multiprocessing_helper, pool_args)
+
+        # add results to ranking dict
+        for entry in results:
+            node = entry[0]
+            centralities = entry[1]
+            for specialty, centrality in zip(self.graph.nodes[node]["specialties"], centralities):
+                # add to rankings for specialty
+                if specialty in self.rankings:
+                    self.rankings[specialty][node] = centrality
+                else:
+                    self.rankings[specialty] = {}
+                    self.rankings[specialty][node] = centrality
+
+        end = time.time()
+        print(f"energies found in {end - start}")
+
     def get_ranking(self):
         """
         get rankings of providers based on specialties
@@ -344,7 +383,7 @@ class ProviderConnections:
         self.sheaf_specialty_conversion()
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centralities_fixed()
+        self.compute_centralities_multiprocessing()
         #self.compute_centrality_multiprocessing(values_to_consider=None)
         ranking = self.get_ranking()
 
@@ -468,7 +507,7 @@ def compare_weights():
 def evaluate_all_methods():
     pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[1, 1, 1])
     # 1, .1, .05
-    graph = pc.build_graph(rows=10000)
+    graph = pc.build_graph()
     sheaf_laplacian_rankings = pc.compute_all_give_rankings()
     specialty_names = list(sheaf_laplacian_rankings.keys())
 

@@ -8,7 +8,7 @@ from math import log2
 
 
 class CompareData:
-    def __init__(self, provider_ranking_file:str="pa_scores.csv",
+    def __init__(self, provider_ranking_file:str="pa_scores_new.csv",
                  taxonomy_info_file:str="taxonomy_info.csv"):
         self.provider_ranking_file = provider_ranking_file
         self.taxonomy_info_file = taxonomy_info_file
@@ -22,11 +22,11 @@ class CompareData:
             next(rank_file)
             providers = {}
             for line in rank_file:
-                provider = line[0].strip()
-                if line[12].strip() == '':
+                provider = line[5].strip()
+                if line[24].strip() == '':
                     score = 0
                 else:
-                    score = float(line[12].strip())
+                    score = float(line[24].strip())
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))
@@ -570,9 +570,9 @@ class EvaluationMethods:
         ranking = {}
         for specialty in specialties:
             specialty_nodes = [n for n, attr in self.graph.nodes(data=True) if specialty in attr.get('specialties')]
-            print(specialty_nodes)
 
             for node_number, node in enumerate(specialty_nodes):
+                print(f"{node_number} of {len(specialty_nodes)}")
                 node_id = node
                 population = nx.node_connected_component(self.graph, node_id)
 

@@ -103,6 +103,7 @@ class ProviderConnections:
             self.graph.remove_node(node)
 
         print(f"{len(remove_nodes)} no specialty nodes removed")
+        print(self.graph.number_of_nodes(), self.graph.number_of_edges())
 
     def build_graph(self, rows=999999999999999999):
         """
@@ -168,6 +169,7 @@ class ProviderConnections:
             # add indices to add in coboundary map later
             spec_num = len(self.graph.nodes[node]["specialties"])
             self.graph.nodes[node]["indices"] = list(range(col, col + spec_num))
+            self.graph.nodes[node]["edge_indices"] = []
             # start at next free index
             col += spec_num + 1
             # start with one to avoid division by 0 in add_coboundary_matrices
@@ -217,6 +219,9 @@ class ProviderConnections:
                 nzr_column_indices.extend(self.graph.nodes[provider]["indices"])
                 for input_num in range(len(self.graph.nodes[provider]["indices"])):
                     nzr_row_indices.append(i)
+
+                # add edges connected to indices for removal later
+                self.graph.nodes[provider]["edge_indices"].append(i)
 
         coboundary_map = sp.sparse.csr_matrix((nonzero_restrictions, (nzr_row_indices, nzr_column_indices)),
                                               shape=(len(self.graph.edges), self.coboundary_columns))
@@ -279,24 +284,24 @@ class ProviderConnections:
         self.sheaf_laplacian.tocsc()
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
         print("computing sheaf laplacian centralities")
+        originial_coboundary = self.coboundary_map.copy()
+        self.coboundary_map = self.coboundary_map.tolil()
         for i, node in enumerate(self.graph.nodes):
             self.graph.nodes[node]["centralities"] = []
             print(f"node {i} of {len(self.graph.nodes)}")
             # for each specialty, get the centrality score
             for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
-                # Get nonzero row indices and values in specialty column
-                col = specialty
-                start_ptr = self.sheaf_laplacian.indptr[col]
-                end_ptr = self.sheaf_laplacian.indptr[col + 1]
-                row_indices = self.sheaf_laplacian.indices[start_ptr:end_ptr]
-                values = self.sheaf_laplacian.data[start_ptr:end_ptr]
-                subtract_total = 0
-                for value, row in zip(values, row_indices):
-                    value = value ** 2
-                    if row != specialty:
-                        value *= 2
-                    subtract_total += value
-                spec_sheaf_laplacian_energy = sheaf_laplacian_energy - subtract_total
+                original_col = self.coboundary_map[:, specialty].copy()
+                self.coboundary_map[:, specialty] = 0
+                original_rows = {}
+                for row in self.graph.nodes[node]["edge_indices"]:
+                    original_rows[row] = (self.coboundary_map.rows[row].copy(), self.coboundary_map.data[row].copy())
+                    self.coboundary_map.rows[row] = []
+                    self.coboundary_map.data[row] = []
+                coboundary_csr = self.coboundary_map.tocsr()
+                self.sheaf_laplacian = coboundary_csr.transpose().dot(originial_coboundary)
+                spec_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
+                spec_sheaf_laplacian_energy = sheaf_laplacian_energy - spec_energy
                 # centrality (impact) for each specialty of each node
                 centrality = (sheaf_laplacian_energy - spec_sheaf_laplacian_energy) / sheaf_laplacian_energy
                 # can probs remove this storage
@@ -308,6 +313,12 @@ class ProviderConnections:
                 else:
                     self.rankings[specialty_name] = {}
                     self.rankings[specialty_name][node] = centrality
+
+                # reset coboundary map
+                self.coboundary_map[:,specialty] = original_col
+                for row, (cols, data) in original_rows.items():
+                    self.coboundary_map.rows[row] = cols
+                    self.coboundary_map.data[row] = data
 
         end = time.time()
         print(f"energies found in {end - start}")
@@ -333,7 +344,7 @@ class ProviderConnections:
         self.sheaf_specialty_conversion()
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centralities()
+        self.compute_centralities_fixed()
         #self.compute_centrality_multiprocessing(values_to_consider=None)
         ranking = self.get_ranking()
 
@@ -455,8 +466,9 @@ def compare_weights():
                                                    save_type="append", hits_n=i, ndcg_n=i)
 
 def evaluate_all_methods():
-    pc = ProviderConnections(primary_specialty_weight=1.9, restriction_weights=[1, .1, .05])
-    graph = pc.build_graph(rows=100000)
+    pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[1, 1, 1])
+    # 1, .1, .05
+    graph = pc.build_graph(rows=10000)
     sheaf_laplacian_rankings = pc.compute_all_give_rankings()
     specialty_names = list(sheaf_laplacian_rankings.keys())
 
@@ -475,6 +487,7 @@ def evaluate_all_methods():
 
     method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"),
                        (rankings_rl, "RegularLaplacian")]
+    # , (rankings_sir, "SIR")
 
     for method_info in method_rankings:
         ranking = method_info[0]

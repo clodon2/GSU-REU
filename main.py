@@ -29,6 +29,7 @@ class ProviderConnections:
         self.graph_data_file = graph_data_file
         self.graph = nx.Graph()
         self.coboundary_columns = 0
+        self.original_coboundary = None
         self.coboundary_map = None
         self.sheaf_laplacian = None
         self.rankings = {}
@@ -312,7 +313,7 @@ class ProviderConnections:
         end = time.time()
         print(f"energies found in {end - start}")
 
-    def compute_centralities_multiprocessing_helper(self, sheaf_laplacian_energy, node, original_coboundary, i):
+    def compute_centralities_multiprocessing_helper(self, sheaf_laplacian_energy, node, i):
         print(f"node {i} of {len(self.graph.nodes)}")
         node_centralities = []
         # for each specialty, get the centrality score
@@ -322,11 +323,10 @@ class ProviderConnections:
                 self.coboundary_map.rows[row] = []
                 self.coboundary_map.data[row] = []
             coboundary_csr = self.coboundary_map.tocsr()
-            self.sheaf_laplacian = coboundary_csr.transpose().dot(original_coboundary)
+            self.sheaf_laplacian = coboundary_csr.transpose().dot(self.original_coboundary)
             spec_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
-            spec_sheaf_laplacian_energy = sheaf_laplacian_energy - spec_energy
             # centrality (impact) for each specialty of each node
-            centrality = (sheaf_laplacian_energy - spec_sheaf_laplacian_energy) / sheaf_laplacian_energy
+            centrality = (sheaf_laplacian_energy - spec_energy) / sheaf_laplacian_energy
 
             node_centralities.append(centrality)
 
@@ -339,11 +339,13 @@ class ProviderConnections:
         self.sheaf_laplacian.tocsc()
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
         print("computing sheaf laplacian centralities")
-        originial_coboundary = self.coboundary_map.copy()
+        self.original_coboundary = self.coboundary_map.copy()
         self.coboundary_map = self.coboundary_map.tolil()
         pool_args = []
+        print("generating pool args")
         for i, node in enumerate(self.graph.nodes):
-            pool_args.append((sheaf_laplacian_energy, node, originial_coboundary, i))
+            pool_args.append((sheaf_laplacian_energy, node, i))
+        print("computing sheaf laplacian centralities")
         with Pool(processes=4) as pool:
             results = pool.starmap(self.compute_centralities_multiprocessing_helper, pool_args)
 
@@ -507,7 +509,7 @@ def compare_weights():
 def evaluate_all_methods():
     pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[1, 1, 1])
     # 1, .1, .05
-    graph = pc.build_graph()
+    graph = pc.build_graph(rows=100000)
     sheaf_laplacian_rankings = pc.compute_all_give_rankings()
     specialty_names = list(sheaf_laplacian_rankings.keys())
 

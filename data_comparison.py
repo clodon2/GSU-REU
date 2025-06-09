@@ -8,7 +8,7 @@ from math import log2
 
 
 class CompareData:
-    def __init__(self, provider_ranking_file:str="pa_scores_new.csv",
+    def __init__(self, provider_ranking_file:str="pa_scores.csv",
                  taxonomy_info_file:str="taxonomy_info.csv"):
         self.provider_ranking_file = provider_ranking_file
         self.taxonomy_info_file = taxonomy_info_file
@@ -22,11 +22,13 @@ class CompareData:
             next(rank_file)
             providers = {}
             for line in rank_file:
-                provider = line[5].strip()
-                if line[24].strip() == '':
+                provider = line[0].strip()
+                # provider for new dataset: 5 old: 0
+                # score for new dataset; 5 old: 11/12
+                if line[11].strip() == '':
                     score = 0
                 else:
-                    score = float(line[24].strip())
+                    score = float(line[11].strip())
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))

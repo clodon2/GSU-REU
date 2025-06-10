@@ -7,6 +7,7 @@ import scipy as sp
 import time
 from multiprocessing import Pool
 from data_comparison import CompareData, EvaluationMethods
+from weight_optimize import DifferentialEvolution
 
 
 class ProviderConnections:
@@ -509,7 +510,7 @@ def compare_weights():
 def evaluate_all_methods():
     pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[1, 1, 1])
     # 1, .1, .05
-    graph = pc.build_graph(rows=100000)
+    graph = pc.build_graph(rows=1000)
     sheaf_laplacian_rankings = pc.compute_all_give_rankings()
     specialty_names = list(sheaf_laplacian_rankings.keys())
 
@@ -530,6 +531,8 @@ def evaluate_all_methods():
                        (rankings_rl, "RegularLaplacian")]
     # , (rankings_sir, "SIR")
 
+    eval_compare.save_actual_rankings()
+
     for method_info in method_rankings:
         ranking = method_info[0]
         title = method_info[1]
@@ -539,11 +542,26 @@ def evaluate_all_methods():
             eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
                                                save_type="append", hits_n=i, ndcg_n=i)
 
+class OptimizeWeights:
+    def __init__(self):
+        self.pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[1, 1, 1])
+        graph = self.pc.build_graph(rows=10000)
+        self.eval_compare = CompareData()
+        self.eval_compare.setup_evaluate(graph)
+
+    def get_weight_score(self, weights):
+        self.pc.restriction_weights = weights
+        sheaf_laplacian_rankings = self.pc.compute_all_give_rankings()
+        return self.eval_compare.get_mean_score(sheaf_laplacian_rankings)
+
+    def find_best_weights(self):
+        DE = DifferentialEvolution(population_size=20, problem_dimensions=3, iterations=30, scaling_factor=.5,
+                                   crossover_chance=.7, search_space=[0, 1], fitness_function=self.get_weight_score)
+        return DE.run()
+
 
 if __name__ == "__main__":
-    evaluate_all_methods()
-    #pc = ProviderConnections(primary_specialty_weight=2, restriction_weights=[.8, 1, 1])
-    #pc.add_test_data()
-
-    #graph = pc.build_graph(rows=1000)
-    #spec_names = pc.compute_all_give_rankings()
+    #evaluate_all_methods()
+    ow = OptimizeWeights()
+    print(ow.find_best_weights())
+    # suggested weights at rows=1000 [0.77577079, 0.        , 1.        ]

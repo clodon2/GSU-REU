@@ -8,7 +8,7 @@ from math import log2
 
 
 class CompareData:
-    def __init__(self, provider_ranking_file:str="pa_scores.csv",
+    def __init__(self, provider_ranking_file:str="pa_scores_new.csv",
                  taxonomy_info_file:str="taxonomy_info.csv"):
         self.provider_ranking_file = provider_ranking_file
         self.taxonomy_info_file = taxonomy_info_file
@@ -22,13 +22,13 @@ class CompareData:
             next(rank_file)
             providers = {}
             for line in rank_file:
-                provider = line[0].strip()
+                provider = line[5].strip()
                 # provider for new dataset: 5 old: 0
-                # score for new dataset; 5 old: 11/12
-                if line[11].strip() == '':
+                # score for new dataset; 24 old: 11/12
+                if line[47].strip() == '':
                     score = 0
                 else:
-                    score = float(line[11].strip())
+                    score = float(line[47].strip())
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))
@@ -86,6 +86,12 @@ class CompareData:
                 write.writerows(row)
             else:
                 write.writerow(row)
+
+    def save_actual_rankings(self):
+        save_info = []
+        for specialty in self.provider_specialty_ranking:
+            save_info.append([specialty, self.provider_specialty_ranking[specialty]])
+        self.save_results("./results/unfilteredActual.csv", save_info)
 
     def evaluate_hits(self, trimmed_rankings:dict, n=15):
         f"""
@@ -145,11 +151,16 @@ class CompareData:
             final_computed_relevancy = []
             # distance calculated by subtracting index
             for i in range(len(final_computed)):
+                found = False
                 for j in range(len(final_ranked)):
                     if final_ranked[j][0] == final_computed[i][0]:
+                        found = True
                         # append distance
                         final_computed_relevancy.append(abs(j - i))
                         break
+
+                if not found:
+                    final_computed_relevancy.append(n)
 
             if not final_computed_relevancy:
                 output[specialty] = 0
@@ -274,11 +285,29 @@ class CompareData:
                 save_row = [eval[1], specialty_name, eval[0][specialty]]
                 save_info.append(save_row)
         """
+        if save_type.lower().strip() != "none":
 
-        if save_type.lower().strip() == "append":
-            self.append_results(save_file_name, save_info)
-        else:
-            self.save_results(save_file_name, save_info)
+            if save_type.lower().strip() == "append":
+                self.append_results(save_file_name, save_info)
+            else:
+                self.save_results(save_file_name, save_info)
+
+    def get_mean_score(self, computed_ranking:dict, n_range=range(10, 50, 10), top_specialties=5):
+        trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, top_specialties)
+
+        # calculate evaluations
+        total_mean = 0
+        evaluations = []
+        for n in n_range:
+            hits_at_n = self.evaluate_hits(trimmed_rankings_by_specialty, n)
+            evaluations.append((hits_at_n, f"hits@{n}"))
+            ndcg_at_n = self.evaluate_NDCG(trimmed_rankings_by_specialty, n)
+            evaluations.append((ndcg_at_n, f"NDCG@{n}"))
+
+        for scores in evaluations:
+            total_mean += scores[0]["mean"]
+
+        return total_mean / len(evaluations)
 
     def extract_ranking(self, file:str):
         with open(file, "r") as extract_file:

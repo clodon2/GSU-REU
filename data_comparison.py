@@ -5,6 +5,7 @@ import numpy as np
 import scipy as sp
 from random import random, shuffle
 from math import log2
+from collections import Counter
 
 
 class CompareData:
@@ -110,6 +111,7 @@ class CompareData:
             # get trimmed rankings
             final_computed = trimmed_rankings[specialty]["final_computed"][:n]
             final_ranked = trimmed_rankings[specialty]["final_ranked"][:n]
+            final_ranked = self.slice_by_unique(trimmed_rankings[specialty]["final_ranked"], n)
 
             # check percentage of correct shared (if correct in computed top n, add to total)
             for i in final_computed:
@@ -147,6 +149,7 @@ class CompareData:
         for specialty in trimmed_rankings:
             final_computed = trimmed_rankings[specialty]["final_computed"][:n]
             final_ranked = trimmed_rankings[specialty]["final_ranked"][:n]
+            final_ranked = self.slice_by_unique(trimmed_rankings[specialty]["final_ranked"], n)
 
             final_computed_relevancy = []
             # distance calculated by subtracting index
@@ -182,6 +185,21 @@ class CompareData:
         output["mean"] = sum(specialty_score[1] for specialty_score in output.items()) / len(trimmed_rankings)
 
         return output
+
+    def slice_by_unique(self, rank_list, n):
+        scores = [score for id, score in rank_list]
+        last_score = scores[0]
+        us_i = 0
+        unique_scores = [0]
+        for score in scores:
+            if last_score == score:
+                unique_scores[us_i] += 1
+            else:
+                unique_scores.append(1)
+                us_i += 1
+
+        actual_n = sum(unique_scores[:n])
+        return rank_list[:actual_n]
 
     def trim_rankings(self, computed_ranking:dict, n):
         """

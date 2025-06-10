@@ -1,8 +1,8 @@
-# Finding the Top Healthcare Providers in a Network
+# Detecting the Top Healthcare Providers by Specialty in a Network
 ## Graph Data Analytics REU at Georgia State University
 ### Dr. Mehmet Aktas, Corey Verkouteren, Djalil Sawadogo
 
-This program is built to find the top healthcare providers in a given network. This network is modeled as a graph in networkx. In this program, we test 3 methods of finding top providers, including sheaf laplacian, graph (regular) laplacian, and page rank. Our premier method is the sheaf laplacian, explored in an earlier paper on influence maximization.
+This program is built to find the top healthcare providers within specific specialties in a given network. This network is modeled as a graph in networkx. In this program, we test 3 methods of finding top providers, including sheaf laplacian, graph (regular) laplacian, and page rank. Our premier method is the sheaf laplacian, explored in an earlier paper on influence maximization.
 
 ### Graph Structure
 Our graph is built with providers as nodes and edges defined as providers working together. These edges have 3 attributes: pair count (number of times worked together), beneficiary count (unique patients together), and same day count (number of times connections where made in the same day). This data is gathered from the [physician shared patient dataset.](https://www.nber.org/research/data/physician-shared-patient-patterns-data)
@@ -22,11 +22,13 @@ The sheaf laplacian is calculated by simply multiplying the transposition of the
 Centralities are found by removing an individual specialty column (making the values all 0) and removing the edges of the vector connected to that specialty (making the row values 0). The energy is then calculated by squaring all non-zero values and summing them. This energy is compared to the energy without the specialty removed with `(original - removed) / original` and this final value is the centrality for a specialty of a node. 
 
 ### Evaluation
-Evaluation is calculated with hits@n and ndcg. Hits@n is the percentage of top n providers that we calculated in the actual top n providers. Normalized discounted gain (NDCG) is calculated by giving each ranking a relevancy score (distance from actual position) and multiplying this by the log of the index, making top placements more impactful to the final score. The actual rankings--ground truth--is from the MIPS score of each provider from the [ranking dataset](https://data.cms.gov/provider-data/dataset/a174-a962#data-table). 
+Evaluation is calculated with hits@n and ndcg. Hits@n is the percentage of top n providers that we calculated in the actual top n providers. Normalized discounted gain (NDCG) is calculated by giving each ranking a relevancy score (distance from actual position) and multiplying this by the log of the index, making top placements more impactful to the final score. The actual rankings--ground truth--is from the MIPS score of each provider from the [ranking dataset](https://data.cms.gov/provider-data/dataset/a174-a962#data-table). These scores are given based on the specialties of each provider, so a provider could be an top provider in multiple specialties, just one, or, if they have low scores, none.
 
 ### Output
-In the result files, the [taxonomy info dataset](https://data.cms.gov/provider-characteristics/medicare-provider-supplier-enrollment/medicare-provider-and-supplier-taxonomy-crosswalk/data?) is used to name each specialty code.
+In the result files, the [taxonomy info dataset](https://data.cms.gov/provider-characteristics/medicare-provider-supplier-enrollment/medicare-provider-and-supplier-taxonomy-crosswalk/data?) is used to name each specialty code. For sheaf laplacian, each specialty will have a different centrality, but page rank and regular laplacian have the same scores for each specialty of a provider because of how their scoring works. Each method result is stored in a separate file.
 
+
+### Dataset Links
 Physician Data (2015 30 day for now): https://www.nber.org/research/data/physician-shared-patient-patterns-data <br/>
 Specialty Data: https://download.cms.gov/nppes/NPI_Files.html or https://data.nber.org/nppes/zip-orig/ <br/>
 Taxonomy Info Data: https://data.cms.gov/provider-characteristics/medicare-provider-supplier-enrollment/medicare-provider-and-supplier-taxonomy-crosswalk/data?query=%7B"filters"%3A%7B"rootConjunction"%3A%7B"label"%3A"And"%2C"value"%3A"AND"%7D%2C"list"%3A%5B%5D%7D%2C"keywords"%3A""%2C"offset"%3A270%2C"limit"%3A10%2C"sort"%3A%7B"sortBy"%3Anull%2C"sortOrder"%3Anull%7D%2C"columns"%3A%5B%5D%7D <br/>

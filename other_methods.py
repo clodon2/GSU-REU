@@ -4,6 +4,7 @@ import numpy as np
 import scipy as sp
 from multiprocessing import Pool
 from scipy.sparse import csr_matrix
+from math import ceil
 
 
 class EvaluationMethods:
@@ -173,13 +174,23 @@ class EvaluationMethods:
         full_energy = lap_matrix.power(2).sum()
         # calculate laplacian centrality
         laplace_centralities_dict = {}
-        pool_args = []
-        for i, node in enumerate(nodelist):
-            pool_args.append((i, node, full_energy, normalized))
 
-        print("starting pool...")
-        with Pool(processes=4) as pool:
-            results = pool.starmap(self.laplacian_centrality_helper, pool_args)
+        # divide up total work into groups to avoid pickling errors with large node number
+        group_size = 50_000
+        divisions = ceil(len(nodelist) / group_size)
+        groups = [nodelist[i * group_size:(i + 1) * group_size] for i in range(divisions)]
+        results = []
+        for group in groups:
+            pool_args = []
+            for i, node in enumerate(group):
+                print(i)
+                i = nodelist.index(node)
+                print(i)
+                pool_args.append((i, node, full_energy, normalized))
+
+            print(f"starting pool...")
+            with Pool(processes=4) as pool:
+                results.extend(pool.starmap(self.laplacian_centrality_helper, pool_args))
 
         print("processing results...")
         for result in results:

@@ -98,7 +98,6 @@ class SheafLaplacian:
         return np.sum(coboundary_map.data ** 2)
 
     def compute_centralities_multiprocessing_helper(self, sheaf_laplacian_energy, node, i):
-        print(f"node {i} of {len(self.graph.nodes)}")
         coboundary_map = self.original_coboundary.copy().tolil()
         node_centralities = []
         # for each specialty, get the centrality score
@@ -107,7 +106,6 @@ class SheafLaplacian:
             for row in self.graph.nodes[node]["edge_indices"]:
                 coboundary_map.rows[row] = []
                 coboundary_map.data[row] = []
-            print(len(self.coboundary_map.rows[0]), "node")
             coboundary_csr = coboundary_map.tocsr()
             self.sheaf_laplacian = coboundary_csr.transpose().dot(self.original_coboundary)
             spec_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
@@ -124,7 +122,6 @@ class SheafLaplacian:
         sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
         self.sheaf_laplacian.tocsc()
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
-        print("computing sheaf laplacian centralities")
         self.original_coboundary = self.coboundary_map.copy()
         self.coboundary_map = self.coboundary_map.tolil()
         pool_args = []

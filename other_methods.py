@@ -40,64 +40,11 @@ class EvaluationMethods:
 
         return rankings
 
-    def get_diagonals(self, csr_mx: sp.sparse.csr_matrix) -> tuple:
-        main_diagonal = []
-        upper_diagonal = []
-        # Access the non-zero elements using row, column, and data
-        row, col = csr_mx.nonzero()
-        for i, j in zip(row, col):
-            if i == j:
-                main_diagonal.append((i, j, csr_mx[i, j]))  # Element at (i, i)
-            elif i < j:
-                upper_diagonal.append((i, j, csr_mx[i, j]))  # Element above the diagonal
-        return main_diagonal, upper_diagonal
-
-    def compute_laplacian_energy(self, laplacian: sp.sparse.csr_matrix) -> float:
-        main_diagonal, upper_diagonal = self.get_diagonals(laplacian)
-        # Compute d
-        diag = 0
-        for _, _, val in main_diagonal:
-            diag += val ** 2
-        # Compute w_upp
-        diag_upp = 0
-        for _, _, val in upper_diagonal:
-            diag_upp += val ** 2
-        # Laplacian energy
-        energy = diag + 2 * diag_upp
-        return energy
-
     def regular_laplacian(self):
-        # Build degree matrix
-        node_list = list(self.graph.nodes())
-        degrees = [self.graph.degree(n) for n in node_list]
-        D = sp.sparse.diags(degrees)
-        # Build the Adjency
-        A = nx.to_scipy_sparse_array(self.graph, nodelist=node_list)
-        # Regular Lapacian marix
-        L = D - A
-
-        L = sp.sparse.csr_matrix(L)
-        laplacian_energy = self.compute_laplacian_energy(L)
-        print(f"reg laplacian energy", laplacian_energy)
-        print("computing laplacian centralities")
         ranking = {}
-        for i, node in enumerate(self.graph.nodes):
-            # Get nonzero row indices and values in node column
-            col = i
-            start_ptr = L.indptr[col]
-            end_ptr = L.indptr[col + 1]
-            row_indices = L.indices[start_ptr:end_ptr]
-            values = L.data[start_ptr:end_ptr]
-            subtract_total = 0
-            for value, row in zip(values, row_indices):
-                value = value ** 2
-                if row != col:
-                    value *= 2
-                subtract_total += value
-            spec_laplacian_energy = laplacian_energy - subtract_total
-            # centrality (impact) of each node
-            centrality = (laplacian_energy - spec_laplacian_energy) / laplacian_energy
-
+        centralities = nx.laplacian_centrality(self.graph)
+        for node in centralities:
+            centrality = centralities[node]
             # add to rankings for specialty
             for specialty_name in self.graph.nodes[node]["specialties"]:
                 if specialty_name in ranking:

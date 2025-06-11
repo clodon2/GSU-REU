@@ -1,6 +1,4 @@
 import networkx as nx
-import matplotlib.pyplot as plt
-from matplotlib import colormaps
 import numpy as np
 import scipy as sp
 import time
@@ -101,14 +99,16 @@ class SheafLaplacian:
 
     def compute_centralities_multiprocessing_helper(self, sheaf_laplacian_energy, node, i):
         print(f"node {i} of {len(self.graph.nodes)}")
+        coboundary_map = self.original_coboundary.copy().tolil()
         node_centralities = []
         # for each specialty, get the centrality score
         for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
-            self.coboundary_map[:, specialty] = 0
+            coboundary_map[:, specialty] = 0
             for row in self.graph.nodes[node]["edge_indices"]:
-                self.coboundary_map.rows[row] = []
-                self.coboundary_map.data[row] = []
-            coboundary_csr = self.coboundary_map.tocsr()
+                coboundary_map.rows[row] = []
+                coboundary_map.data[row] = []
+            print(len(self.coboundary_map.rows[0]), "node")
+            coboundary_csr = coboundary_map.tocsr()
             self.sheaf_laplacian = coboundary_csr.transpose().dot(self.original_coboundary)
             spec_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
             # centrality (impact) for each specialty of each node
@@ -132,7 +132,7 @@ class SheafLaplacian:
 
         # divide up total work into groups to avoid pickling errors with large node number
         group_size = 50_000
-        divisions = len(self.graph.nodes) // group_size
+        divisions = ceil(len(self.graph.nodes) / group_size)
         groups = [list(self.graph.nodes)[i * group_size:(i + 1) * group_size] for i in range(divisions)]
 
         # process groups, centralities
@@ -201,39 +201,3 @@ class SheafLaplacian:
         print(self.coboundary_map)
 
         self.compute_sheaf_laplacian()
-
-    def draw_graph(self, edge_colors: bool = True, edge_labels: bool = True):
-        """
-        draw self.graph in a new window
-        :param edge_colors: color edges based on intensity (darker larger weight)
-        :param edge_labels: label weights of edges
-        :return:
-        """
-        # best layouts
-        # can look confusing
-        pos = nx.spring_layout(self.graph, seed=7443, k=20)
-        # probably the best but intensive
-        # pos = nx.kamada_kawai_layout(self.graph)
-        # circular (like a better spring)
-        # pos = nx.forceatlas2_layout(self.graph)
-        # good variety of distances but can look crowded
-        pos = nx.fruchterman_reingold_layout(self.graph)
-
-        if edge_colors:
-            color_map = colormaps["Blues"]
-            weights = [self.graph[u][v]["weight"] for u, v in self.graph.edges()]
-            # scale color map to maximum weight in graph
-            # min_weight = min(weights)
-            max_weight = max(weights)
-        else:
-            color_map = None
-            weights = None
-            max_weight = 0
-
-        if edge_labels:
-            edge_weights = nx.get_edge_attributes(self.graph, "weight")
-            nx.draw_networkx_edge_labels(self.graph, pos, edge_weights)
-
-        nx.draw_networkx(self.graph, pos=pos, with_labels=True,
-                         edge_color=weights, edge_cmap=color_map, edge_vmin=0, edge_vmax=max_weight)
-        plt.show()

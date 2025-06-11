@@ -2,6 +2,8 @@ import networkx as nx
 import time
 import csv
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import colormaps
 
 
 class GraphBuilder:
@@ -179,3 +181,39 @@ class GraphBuilder:
         self.coboundary_columns = col
         end = time.time()
         print(f"totals calculated in {end - start}")
+
+    def draw_graph(self, edge_colors: bool = True, edge_labels: bool = True):
+        """
+        draw self.graph in a new window
+        :param edge_colors: color edges based on intensity (darker larger weight)
+        :param edge_labels: label weights of edges
+        :return:
+        """
+        # best layouts
+        # can look confusing
+        pos = nx.spring_layout(self.graph, seed=7443, k=20)
+        # probably the best but intensive
+        # pos = nx.kamada_kawai_layout(self.graph)
+        # circular (like a better spring)
+        # pos = nx.forceatlas2_layout(self.graph)
+        # good variety of distances but can look crowded
+        pos = nx.fruchterman_reingold_layout(self.graph)
+
+        if edge_colors:
+            color_map = colormaps["Blues"]
+            weights = [self.graph[u][v]["weight"] for u, v in self.graph.edges()]
+            # scale color map to maximum weight in graph
+            # min_weight = min(weights)
+            max_weight = max(weights)
+        else:
+            color_map = None
+            weights = None
+            max_weight = 0
+
+        if edge_labels:
+            edge_weights = nx.get_edge_attributes(self.graph, "weight")
+            nx.draw_networkx_edge_labels(self.graph, pos, edge_weights)
+
+        nx.draw_networkx(self.graph, pos=pos, with_labels=True,
+                         edge_color=weights, edge_cmap=color_map, edge_vmin=0, edge_vmax=max_weight)
+        plt.show()

@@ -5,7 +5,7 @@ from math import log2
 
 
 class CompareData:
-    def __init__(self, provider_ranking_file:str="pa_scores_new.csv",
+    def __init__(self, provider_ranking_file:str="pa_scores.csv",
                  taxonomy_info_file:str="taxonomy_info.csv"):
         self.provider_ranking_file = provider_ranking_file
         self.taxonomy_info_file = taxonomy_info_file
@@ -19,13 +19,13 @@ class CompareData:
             next(rank_file)
             providers = {}
             for line in rank_file:
-                provider = line[5].strip()
+                provider = line[0].strip()
                 # provider for new dataset: 5 old: 0
                 # score for new dataset; 24 old: 11/12
-                if line[47].strip() == '':
-                    score = 0
+                if (line[11].strip() == ''):
+                    continue
                 else:
-                    score = float(line[47].strip())
+                    score = float(line[11].strip())
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))
@@ -107,15 +107,16 @@ class CompareData:
             # get trimmed rankings
             final_computed = trimmed_rankings[specialty]["final_computed"][:n]
             final_ranked = trimmed_rankings[specialty]["final_ranked"][:n]
-            final_ranked = self.slice_by_unique(trimmed_rankings[specialty]["final_ranked"], n)
+            final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])[:n]
 
             # check percentage of correct shared (if correct in computed top n, add to total)
             for i in final_computed:
-                for j in final_ranked:
-                    if i[0] == j[0]:
-                        hits_at_n += 1
-                        # there is something wrong here...should only count once unless duplicate npi
-                        # without break, value increases over 1 for hits@ so need to check rest of code
+                for j in range(len(final_ranked)):
+                    for score in final_ranked[j]:
+                        if i[0] == score[0]:
+                            hits_at_n += 1
+                            # there is something wrong here...should only count once unless duplicate npi
+                            # without break, value increases over 1 for hits@ so need to check rest of code
 
             # check if in exact position
             """
@@ -144,19 +145,19 @@ class CompareData:
 
         for specialty in trimmed_rankings:
             final_computed = trimmed_rankings[specialty]["final_computed"][:n]
-            final_ranked = trimmed_rankings[specialty]["final_ranked"][:n]
-            final_ranked = self.slice_by_unique(trimmed_rankings[specialty]["final_ranked"], n)
+            final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])[:n]
 
             final_computed_relevancy = []
             # distance calculated by subtracting index
             for i in range(len(final_computed)):
                 found = False
                 for j in range(len(final_ranked)):
-                    if final_ranked[j][0] == final_computed[i][0]:
-                        found = True
-                        # append distance
-                        final_computed_relevancy.append(abs(j - i))
-                        break
+                    for score in final_ranked[j]:
+                        if score[0] == final_computed[i][0]:
+                            found = True
+                            # append distance
+                            final_computed_relevancy.append(abs(j - i))
+                            break
 
                 if not found:
                     final_computed_relevancy.append(n)
@@ -196,6 +197,28 @@ class CompareData:
 
         actual_n = sum(unique_scores[:n])
         return rank_list[:actual_n]
+
+    def groupify_same_scores(self, rank_list):
+        """
+        group scores into a list of lists where each sub-list is nodes with the same score
+        doesn't work if scores aren't sorted
+        :param rank_list: a sorted list of tuples [(node, score)]
+        :return: list of lists
+        """
+        grouped_rankings = [[rank_list[0]]]
+        group_index = 0
+        last_score = rank_list[0]
+        for score in rank_list[1:]:
+            if score[1] == last_score[1]:
+                grouped_rankings[group_index].append(score)
+            else:
+                grouped_rankings.append([])
+                group_index += 1
+                grouped_rankings[group_index].append(score)
+            last_score = score
+
+        print(len(grouped_rankings), sum(len(group) for group in grouped_rankings), len(grouped_rankings[-1]))
+        return grouped_rankings
 
     def trim_rankings(self, computed_ranking:dict, n):
         """
@@ -354,139 +377,3 @@ class CompareData:
                 extracted_dict[specialty] = cleaned_rankings
 
         return extracted_dict
-
-    def compare(self, graph:Graph, computed_ranking:dict, title="unknonwn",
-                show_lists=True, hits_n=15, top_specialties=5):
-        """
-        deprecated due to inflexibility
-        :param graph: graph used for calculations
-        :param computed_ranking: computed ranking of method, formatted specialty: list of (provider, score)
-        :param title: the method type used, prints
-        :param show_lists: prints the raw rankings for actual and computed for all specialties (in actual)
-        :param hits_n: hits at n to evaluate (top n providers in specialty)
-        :param top_specialties: number of specialties to calculate hits at n for, more rankings in actual is prioritized
-        :return:
-        """
-        # save raw computed ranking data
-        print(f"Saving unfiltered results to ./results/results_unfiltered{title.strip()}.csv...")
-        with open(f"./results/results_unfiltered{title.strip()}.csv", "w", newline='') as unfiltered:
-            write = csv.writer(unfiltered)
-            write.writerow(["key", "rankings"])
-            for key in computed_ranking:
-                write.writerow([key, computed_ranking[key]])
-
-        self.import_provider_ranking()
-        self.add_provider_specialties(graph)
-        self.import_taxonomy_info()
-        self.sort_scores()
-
-        # only get results for top 5 specialties
-        specialty_scores = []
-        for specialty in self.provider_specialty_ranking:
-            specialty_scores.append((specialty, len(self.provider_specialty_ranking[specialty])))
-
-        specialty_scores = sorted(specialty_scores, key=lambda item: item[1], reverse=True)
-        specialty_scores = specialty_scores[:top_specialties]
-
-        mean_hits_at_n = 0
-
-        # setup file saving
-        save_file_name = f"./results/results{title.strip()}.csv"
-        save_info = []
-
-        print(f"comparison of {title} to expected")
-        for entry in specialty_scores:
-            specialty = entry[0]
-            # calculate hits@n
-            final_computed = []
-            final_ranked = []
-            hits_at_n = 0
-            #
-            for score in self.provider_specialty_ranking[specialty]:
-                for calc_score in computed_ranking[specialty]:
-                    if score[0] == calc_score[0]:
-                        final_computed.append(calc_score)
-                        final_ranked.append(score)
-                        break
-
-            # remove duplicates (move to dict creation probs)
-            for score in final_ranked:
-                count = final_ranked.count(score)
-                for i in range(count - 1):
-                    final_ranked.remove(score)
-
-            for score in final_computed:
-                count = final_computed.count(score)
-                for i in range(count - 1):
-                    final_computed.remove(score)
-
-            final_ranked = sorted(final_ranked, key= lambda item: item[1], reverse=True)
-            final_computed = sorted(final_computed, key= lambda item: item[1], reverse=True)
-
-            final_computed = final_computed[:hits_n]
-            final_ranked = final_ranked[:hits_n]
-
-            # check percentage of correct shared
-            for i in final_computed:
-                for j in final_ranked:
-                    if i[0] == j[0]:
-                        hits_at_n += 1
-
-
-            # check if in exact position
-            """
-            for i in range(hits_n):
-                if final_ranked[i][0] == final_computed[i][0]:
-                    hits_at_n += 1
-            """
-
-            for score in final_computed:
-                print(f"%10d %15f" % (score[0], score[1]), end=" ")
-
-            print()
-
-            for score in final_ranked:
-                print(f"%10d %15f" % (score[0], score[1]), end=" ")
-
-            print()
-
-            hits_at_n /= hits_n
-            mean_hits_at_n += hits_at_n
-
-
-            try:
-                print(f"Hits at {hits_n} for {self.taxonomy_info[specialty]}:")
-                save_row = [hits_n, self.taxonomy_info[specialty]]
-            except:
-                print(f"Hits at {hits_n} for {specialty}:")
-                save_row = [hits_n, specialty]
-            print(hits_at_n)
-            save_row.append(hits_at_n)
-            save_row.append('')
-            save_info.append(save_row)
-            print()
-
-        mean_hits_at_n = mean_hits_at_n / top_specialties
-
-        save_info.append(['', '', '', mean_hits_at_n])
-
-        print(f"mean hits at {hits_n}: {mean_hits_at_n}")
-
-        if show_lists:
-            for specialty in self.provider_specialty_ranking:
-                try:
-                    print(f"Ranking for {self.taxonomy_info[specialty]}")
-                except:
-                    f"Ranking for {specialty}"
-                print("Computed:")
-                print(f"{computed_ranking[specialty]}")
-                print("Actual:")
-                try:
-                    print(f"{self.provider_specialty_ranking[specialty]}")
-                except:
-                    print("None")
-                print()
-
-        self.save_results(save_file_name, save_info)
-        specialty_scores = [name[0] for name in specialty_scores]
-        return specialty_scores

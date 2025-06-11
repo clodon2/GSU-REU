@@ -37,7 +37,7 @@ def eval_sheaf_lap():
 
 def evaluate_all_methods():
     graph_builder = GraphBuilder(primary_specialty_weight=2)
-    graph = graph_builder.build_graph(rows=1000)
+    graph = graph_builder.build_graph(rows=10000)
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,

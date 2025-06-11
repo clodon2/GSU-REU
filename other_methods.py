@@ -183,9 +183,7 @@ class EvaluationMethods:
         for group in groups:
             pool_args = []
             for i, node in enumerate(group):
-                print(i)
                 i = nodelist.index(node)
-                print(i)
                 pool_args.append((i, node, full_energy, normalized))
 
             print(f"starting pool...")

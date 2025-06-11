@@ -15,7 +15,6 @@ class SheafLaplacian:
         self.restriction_weights = restriction_weights
         self.graph = graph
         self.coboundary_columns = coboundary_columns
-        self.original_coboundary = None
         self.coboundary_map = None
         self.sheaf_laplacian = None
         self.rankings = {}
@@ -51,9 +50,6 @@ class SheafLaplacian:
                 for input_num in range(len(self.graph.nodes[provider]["indices"])):
                     nzr_row_indices.append(i)
 
-                # add edges connected to indices for removal later
-                self.graph.nodes[provider]["edge_indices"].append(i)
-
         coboundary_map = sp.sparse.csr_matrix((nonzero_restrictions, (nzr_row_indices, nzr_column_indices)),
                                               shape=(len(self.graph.edges), self.coboundary_columns))
 
@@ -82,33 +78,22 @@ class SheafLaplacian:
 
         return sheaf_lap
 
-    def get_diagonals(self, csr_mx: sp.sparse.csr_matrix) -> tuple:
-        main_diagonal = []
-        upper_diagonal = []
-        # Access the non-zero elements using row, column, and data
-        row, col = csr_mx.nonzero()
-        for i, j in zip(row, col):
-            if i == j:
-                main_diagonal.append((i, j, csr_mx[i, j]))  # Element at (i, i)
-            elif i < j:
-                upper_diagonal.append((i, j, csr_mx[i, j]))  # Element above the diagonal
-        return main_diagonal, upper_diagonal
-
     def compute_sheaf_laplacian_energy(self, coboundary_map: sp.sparse.csr_matrix) -> float:
         return np.sum(coboundary_map.data ** 2)
 
     def compute_centralities_multiprocessing_helper(self, sheaf_laplacian_energy, node, i):
-        coboundary_map = self.original_coboundary.copy().tolil()
+        # should be lil
+        coboundary_map = self.coboundary_map.copy()
         node_centralities = []
         # for each specialty, get the centrality score
         for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
+            # "remove" specialty column
             coboundary_map[:, specialty] = 0
-            for row in self.graph.nodes[node]["edge_indices"]:
-                coboundary_map.rows[row] = []
-                coboundary_map.data[row] = []
+            # convert to csr for matrix multiplication
             coboundary_csr = coboundary_map.tocsr()
-            self.sheaf_laplacian = coboundary_csr.transpose().dot(self.original_coboundary)
-            spec_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
+            # sheaf laplacian of coboundary w/ removed
+            sheaf_laplacian = coboundary_csr.transpose().dot(coboundary_map)
+            spec_energy = self.compute_sheaf_laplacian_energy(sheaf_laplacian)
             # centrality (impact) for each specialty of each node
             centrality = (sheaf_laplacian_energy - spec_energy) / sheaf_laplacian_energy
 
@@ -120,9 +105,8 @@ class SheafLaplacian:
         print("computing sheaf laplacian energy...")
         start = time.time()
         sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
-        self.sheaf_laplacian.tocsc()
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
-        self.original_coboundary = self.coboundary_map.copy()
+        # convert coboundary map for column removal later
         self.coboundary_map = self.coboundary_map.tolil()
         pool_args = []
         print("generating pool args")

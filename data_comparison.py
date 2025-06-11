@@ -1,4 +1,6 @@
 import csv
+
+from fontTools.varLib.interpolatableHelpers import find_parents_and_order
 from networkx import Graph
 from random import shuffle
 from math import log2
@@ -141,30 +143,30 @@ class CompareData:
 
     def evaluate_NDCG(self, trimmed_rankings:dict, n=15):
         output = {}
-        mean_NDCG = 0
 
         for specialty in trimmed_rankings:
             final_computed = trimmed_rankings[specialty]["final_computed"][:n]
             final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])[:n]
 
+            # need to create a placing dictionary for distance comparison
+            id_to_ideal_positions = {}
+            current_pos = 0
+            for group in final_ranked:
+                group_indices = list(range(current_pos, current_pos + len(group)))
+                for item in group:
+                    id_to_ideal_positions[item[0]] = group_indices
+                current_pos += len(group)
+
+            # relevancy based on distances
             final_computed_relevancy = []
-            # distance calculated by subtracting index
-            for i in range(len(final_computed)):
-                found = False
-                for j in range(len(final_ranked)):
-                    for score in final_ranked[j]:
-                        if score[0] == final_computed[i][0]:
-                            found = True
-                            # append distance
-                            final_computed_relevancy.append(abs(j - i))
-                            break
-
-                if not found:
-                    final_computed_relevancy.append(n)
-
-            if not final_computed_relevancy:
-                output[specialty] = 0
-                continue
+            for i, (item_id, score) in enumerate(final_computed):
+                ideal_positions = id_to_ideal_positions.get(item_id, [])
+                if not ideal_positions:
+                    final_computed_relevancy.append(len(final_computed))
+                elif i in ideal_positions:
+                    final_computed_relevancy.append(0)
+                else:
+                    final_computed_relevancy.append(min(abs(i - p) for p in ideal_positions))
 
             discounted_gain = 0
             for i, distance in enumerate(final_computed_relevancy):
@@ -217,7 +219,6 @@ class CompareData:
                 grouped_rankings[group_index].append(score)
             last_score = score
 
-        print(len(grouped_rankings), sum(len(group) for group in grouped_rankings), len(grouped_rankings[-1]))
         return grouped_rankings
 
     def trim_rankings(self, computed_ranking:dict, n):

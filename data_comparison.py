@@ -8,6 +8,11 @@ from math import log2
 class CompareData:
     def __init__(self, provider_ranking_file:str="pa_scores.csv",
                  taxonomy_info_file:str="taxonomy_info.csv"):
+        """
+        object used to compare computed rankings to the ground truth
+        :param provider_ranking_file: filename of ground truth dataset
+        :param taxonomy_info_file: filename of taxonomy code > actual name dataset
+        """
         self.provider_ranking_file = provider_ranking_file
         self.taxonomy_info_file = taxonomy_info_file
         self.provider_ranking = []
@@ -15,6 +20,10 @@ class CompareData:
         self.taxonomy_info = {}
 
     def import_provider_ranking(self):
+        """
+        import ground truth ranking information from dataset file
+        :return:
+        """
         with open(self.provider_ranking_file, "r") as rank_file:
             rank_file = csv.reader(rank_file)
             next(rank_file)
@@ -36,6 +45,10 @@ class CompareData:
                         providers[provider] = score
 
     def import_taxonomy_info(self):
+        """
+        import taxonomy name information from dataset
+        :return:
+        """
         with open(self.taxonomy_info_file, "r") as tax_file:
             tax_file = csv.reader(tax_file)
             next(tax_file)
@@ -43,12 +56,18 @@ class CompareData:
                 self.taxonomy_info[line[2].strip()] = line[3].strip()
 
     def add_provider_specialties(self, graph:Graph):
+        """
+        add specialty sorting to imported data
+        :param graph: graph to get specialty information from
+        :return:
+        """
         for entry in self.provider_ranking:
             provider = int(entry[0])
             score = float(entry[1])
             if provider in graph.nodes:
                 specialties = graph.nodes[provider]["specialties"]
                 for specialty in specialties:
+                    # if list of nodes with specialty already exists, add to it, if not, create and add
                     if specialty in self.provider_specialty_ranking:
                         self.provider_specialty_ranking[specialty].append(entry)
                     else:
@@ -56,18 +75,33 @@ class CompareData:
                         self.provider_specialty_ranking[specialty].append(entry)
 
     def sort_scores(self):
+        """
+        sort ground truth scores as as a whole and for each specialty node list
+        :return:
+        """
         self.provider_ranking = sorted(self.provider_ranking, key=lambda item: item[1], reverse=True)
         for specialty in self.provider_specialty_ranking:
             values = self.provider_specialty_ranking[specialty]
             self.provider_specialty_ranking[specialty] = sorted(values, key=lambda item: item[1], reverse=True)
 
     def setup_evaluate(self, graph:Graph):
+        """
+        setup comparison object for evaluation
+        :param graph: graph to get specialty info from
+        :return:
+        """
         self.import_provider_ranking()
         self.add_provider_specialties(graph)
         self.import_taxonomy_info()
         self.sort_scores()
 
     def save_results(self, file:str, row):
+        """
+        save data to csv file in ./results/
+        :param file: filename to be created
+        :param row: row or list of rows to add to file
+        :return:
+        """
         print(f"saving results to {file}...")
         with open(file, "w", newline='') as save_file:
             write = csv.writer(save_file)
@@ -77,6 +111,12 @@ class CompareData:
                 write.writerow(row)
 
     def append_results(self, file:str, row):
+        """
+        save data to csv file ./results/ , doesn't destroy data already in there
+        :param file: filename to save to
+        :param row: row or list of rows of data to append
+        :return:
+        """
         print(f"saving results to {file}...")
         with open(file, "a", newline='') as save_file:
             write = csv.writer(save_file)
@@ -86,6 +126,10 @@ class CompareData:
                 write.writerow(row)
 
     def save_actual_rankings(self):
+        """
+        save ground truth ranking information to csv
+        :return:
+        """
         save_info = []
         for specialty in self.provider_specialty_ranking:
             save_info.append([specialty, self.provider_specialty_ranking[specialty]])
@@ -143,6 +187,12 @@ class CompareData:
         return output
 
     def evaluate_NDCG(self, trimmed_rankings:dict, n=15):
+        """
+        get the normalized discounted gain for computed vs ground truth
+        :param trimmed_rankings: dictionary of specialty : computed and ground truth : rankings
+        :param n: number of top scores to consider
+        :return: dict of specialty : ndcg
+        """
         output = {}
 
         for specialty in trimmed_rankings:
@@ -187,6 +237,11 @@ class CompareData:
         return output
 
     def evaluate_correlation(self, trimmed_rankings):
+        """
+        get the correlation between ground truth and computed
+        :param trimmed_rankings: dictionary of specialty : computed and ground truth : rankings
+        :return: dict of specialty : correlation
+        """
         output = {}
         for specialty in trimmed_rankings:
             final_computed = self.groupify_same_scores(trimmed_rankings[specialty]["final_computed"])
@@ -221,11 +276,18 @@ class CompareData:
 
 
     def slice_by_unique(self, rank_list, n):
+        """
+        deprecated, slice a score list to the nth unique score entries
+        :param rank_list: list of tuples [(id, score)]
+        :param n: unique scores to include
+        :return: sliced list at unique number of n
+        """
         scores = [score for id, score in rank_list]
         last_score = scores[0]
         us_i = 0
         unique_scores = [0]
         for score in scores:
+            # assume scores are sorted, if still same add to count
             if last_score == score:
                 unique_scores[us_i] += 1
             else:
@@ -246,6 +308,7 @@ class CompareData:
         group_index = 0
         last_score = rank_list[0]
         for score in rank_list[1:]:
+            # if score still same, add to current group
             if score[1] == last_score[1]:
                 grouped_rankings[group_index].append(score)
             else:
@@ -290,7 +353,7 @@ class CompareData:
             final_ranked = list(dict.fromkeys(final_ranked))
             final_computed = list(dict.fromkeys(final_computed))
 
-            # remove biases
+            # remove biases, need to check this
             shuffle(final_computed)
 
             final_ranked = sorted(final_ranked, key=lambda item: item[1], reverse=True)
@@ -303,7 +366,20 @@ class CompareData:
 
 
     def evaluate_all_and_save(self, computed_ranking:dict, title="unknonwn",
-                              save_unfiltered=True, hits_n=15, ndcg_n=15, correlation=True, top_specialties=5, save_type="new"):
+                              save_unfiltered=True, hits_n=15, ndcg_n=15, correlation=True, top_specialties=5,
+                              save_type="new"):
+        """
+        evaluate for all evaluation methods (optionally) and save the output
+        :param computed_ranking: dictionary of specialty : scores
+        :param title: scoring method name, used for saving
+        :param save_unfiltered: if true, save the computed_ranking information to a csv before processing
+        :param hits_n: evaluate hits at top n
+        :param ndcg_n: evaluate hits at top n
+        :param correlation: evaluate correlation to ground truth or not
+        :param top_specialties: specialties to consider in comparison, based on most available scores in ground truth
+        :param save_type: "new" or "append" or "none" -- how to save data to file
+        :return:
+        """
         if save_unfiltered:
             print(f"Saving unfiltered results to ./results/results_unfiltered{title.strip()}.csv...")
             with open(f"./results/results_unfiltered{title.strip()}.csv", "w", newline='') as unfiltered:
@@ -370,6 +446,13 @@ class CompareData:
                 self.save_results(save_file_name, save_info)
 
     def get_mean_score(self, computed_ranking:dict, n_range=range(10, 50, 10), top_specialties=5):
+        """
+        get the mean of all ndcg and hits@n scores, "overall" ranking
+        :param computed_ranking: dictionary of specialty : scores
+        :param n_range: range to evaluate ns at (hits@n, ndcg at top n)
+        :param top_specialties: specialties to consider in comparison, based on most available scores in ground truth
+        :return:
+        """
         trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, top_specialties)
 
         # calculate evaluations
@@ -387,12 +470,18 @@ class CompareData:
         return total_mean / len(evaluations)
 
     def extract_ranking(self, file:str):
+        """
+        get ranking from unfiltered ranking file
+        :param file: unfiltered rank file name
+        :return: dict of specialty : scores
+        """
         with open(file, "r") as extract_file:
             extract = csv.reader(extract_file)
             header = next(extract)
             extracted_dict = {}
             for row in extract:
                 specialty = row[0]
+                # clean non-score info
                 if row[1][:10] == "dict_items":
                     row[1] = row[1][11:-1]
                 row[1] = row[1].replace("[", " ")
@@ -400,6 +489,7 @@ class CompareData:
 
                 rankings = row[1].split("), ")
                 cleaned_rankings = []
+                # clean each ranking and add to cleaned rankings
                 for entry in rankings:
                     entry = entry.strip()
                     if entry[-1] == ")":
@@ -411,6 +501,7 @@ class CompareData:
                             entry += ")"
                     entry = entry.split(", ")
                     entry[0] = int(entry[0])
+                    # eval to compute into actual number (needed because of numpy flaots)
                     entry[1] = eval(entry[1])
                     entry = tuple(entry)
                     cleaned_rankings.append(entry)

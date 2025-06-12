@@ -7,12 +7,13 @@ from math import ceil
 
 
 class SheafLaplacian:
-    def __init__(self, graph:nx.Graph, coboundary_columns:int, restriction_weights:list=[1, 1, 1]):
+    def __init__(self, graph:nx.Graph, coboundary_columns:int, restriction_weights:list=[1, 1, 1], primary_specialty_weight:float=2):
         """
         create provider graph manager
         :param restriction_weights: [pair count weight, beneficiary count weight, same day count weight]
         """
         self.restriction_weights = restriction_weights
+        self.primary_specialty_weight = primary_specialty_weight
         self.graph = graph
         self.coboundary_columns = coboundary_columns
         self.coboundary_map = None
@@ -44,6 +45,11 @@ class SheafLaplacian:
                 same_day_total = self.restriction_weights[2] * (edge_same_days / self.graph.nodes[provider]["same_total"])
                 restriction = np.array([pair_percentage, bene_total, same_day_total])
 
+                # check primery weight is correct
+                if self.graph.nodes[provider]["primary"]:
+                    specialty_primary_index = self.graph.nodes[provider]["specialties"].index(self.graph.nodes[provider]["primary"])
+                    if self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] != self.primary_specialty_weight:
+                        self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] = self.primary_specialty_weight
                 # add info to array for sparse matrix conversion
                 nonzero_restrictions.extend((self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction)).tolist())
                 nzr_column_indices.extend(self.graph.nodes[provider]["indices"])

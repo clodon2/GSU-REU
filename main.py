@@ -77,29 +77,28 @@ def evaluate_all_methods():
 class OptimizeWeights:
     def __init__(self):
         graph_builder = GraphBuilder(primary_specialty_weight=2)
-        graph = graph_builder.build_graph(rows=10000)
+        graph = graph_builder.build_graph(rows=1000)
         self.sheaf_laplacian = SheafLaplacian(graph=graph,
                                               coboundary_columns=graph_builder.coboundary_columns,
-                                              restriction_weights=[1, 1, 1])
+                                              restriction_weights=[1, 1, 1],
+                                              primary_specialty_weight=2)
         self.eval_compare = CompareData()
         self.eval_compare.setup_evaluate(graph)
 
     def get_weight_score(self, weights):
-        self.sheaf_laplacian.restriction_weights = weights
+        self.sheaf_laplacian.primary_specialty_weight = weights[:1]
+        self.sheaf_laplacian.restriction_weights = weights[1:]
         sheaf_laplacian_rankings = self.sheaf_laplacian.compute_all_give_rankings()
         return self.eval_compare.get_mean_score(sheaf_laplacian_rankings)
 
     def find_best_weights(self):
-        DE = DifferentialEvolution(population_size=20, problem_dimensions=3, iterations=20, scaling_factor=.5,
-                                   crossover_chance=.7, search_space=[0, 1], fitness_function=self.get_weight_score)
+        DE = DifferentialEvolution(population_size=20, problem_dimensions=4, iterations=20, scaling_factor=.5,
+                                   crossover_chance=.7, search_space=[0, 2], fitness_function=self.get_weight_score)
         return DE.run()
 
 
 if __name__ == "__main__":
-    evaluate_all_methods()
-    #ow = OptimizeWeights()
-    #print(ow.find_best_weights())
-    # suggested weights at rows=1000 [0.77577079, 0.        , 1.        ]
-    # rows=10000 (0.08504771744480666, array([1.        , 0.85599797, 0.76237238]))
-    # new suggested at 5000
-    # (0.19478033188859017, array([0.99688818, 0.43987648, 0.94187009]))
+    #evaluate_all_methods()
+    ow = OptimizeWeights()
+    print(ow.find_best_weights())
+    # suggested weights at 1000: (0.5440900111139723, array([0.69067041, 0.59055783, 0.        ]))

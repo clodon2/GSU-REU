@@ -1,3 +1,5 @@
+from os import remove
+
 import networkx as nx
 import time
 import csv
@@ -14,7 +16,6 @@ class GraphBuilder:
         """
         create provider graph manager
         :param primary_specialty_weight: the weight given to a provider's main specialty
-        :param restriction_weights: [pair count weight, beneficiary count weight, same day count weight]
         :param provider_data_file: data file to load provider edges from (nodes created also)
         :param specialty_data_file: data file to load specialty data from for providers
         :param graph_data_file: data file to save/load graph to
@@ -98,7 +99,7 @@ class GraphBuilder:
         print(f"{len(remove_nodes)} no specialty nodes removed")
         print(self.graph.number_of_nodes(), self.graph.number_of_edges())
 
-    def build_graph(self, rows=999999999999999999):
+    def build_graph(self, rows=999999999999999999, remove_unscored_nodes_file=''):
         """
         create graph structure for providers and add specialties
         :return: the graph
@@ -106,6 +107,8 @@ class GraphBuilder:
         print("building graph...")
         start = time.time()
         self.import_txt_data(rows=rows)
+        if remove_unscored_nodes_file:
+            self.remove_unscored_nodes(remove_unscored_nodes_file)
         self.add_specialties_fast()
         self.sheaf_specialty_conversion()
         self.add_provider_totals()
@@ -181,6 +184,36 @@ class GraphBuilder:
         self.coboundary_columns = col
         end = time.time()
         print(f"totals calculated in {end - start}")
+
+    def remove_unscored_nodes(self, score_file_name):
+        """
+        removes nodes that do not have a score in the scoring dataset from the graph
+        :param score_file_name: the score dataset filename
+        :return:
+        """
+        valid_providers = set()
+        with open(score_file_name, "r") as rank_file:
+            rank_file = csv.reader(rank_file)
+            next(rank_file)
+            for line in rank_file:
+                provider = int(line[0].strip())
+                # provider for new dataset: 5 old: 0
+                valid_providers.add(provider)
+
+        unscored_nodes = [node for node in self.graph.nodes if node not in valid_providers]
+        print(f"removed {len(unscored_nodes)} no score nodes")
+
+        self.graph.remove_nodes_from(unscored_nodes)
+
+    def remove_small_connections(self):
+        """
+        removes any weakly connected components from the graph
+        :return:
+        """
+        components = nx.connected_components(self.graph)
+        for component in components:
+            if len(component) <= (.05 * self.graph.number_of_nodes()):
+                self.graph.remove_nodes_from(component)
 
     def draw_graph(self, edge_colors: bool = True, edge_labels: bool = True):
         """

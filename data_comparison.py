@@ -23,10 +23,10 @@ class CompareData:
                 provider = line[0].strip()
                 # provider for new dataset: 5 old: 0
                 # score for new dataset; 24 old: 11/12
-                if (line[12].strip() == ''):
+                if (line[11].strip() == ''):
                     continue
                 else:
-                    score = float(line[12].strip())
+                    score = float(line[11].strip())
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))
@@ -110,14 +110,16 @@ class CompareData:
             final_ranked = trimmed_rankings[specialty]["final_ranked"][:n]
             final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])[:n]
 
+            counted = set()
             # check percentage of correct shared (if correct in computed top n, add to total)
             for i in final_computed:
                 for j in range(len(final_ranked)):
                     for score in final_ranked[j]:
                         if i[0] == score[0]:
-                            hits_at_n += 1
-                            # there is something wrong here...should only count once unless duplicate npi
-                            # without break, value increases over 1 for hits@ so need to check rest of code
+                            if i[0] not in counted:
+                                counted.add(i[0])
+                                hits_at_n += 1
+                            break
 
             # check if in exact position
             """
@@ -312,12 +314,12 @@ class CompareData:
 
         trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, top_specialties)
         """
-        for specialty in trimmed_rankings_by_specialty:
-            print(specialty)
-            for cscore, rscore in zip(trimmed_rankings_by_specialty[specialty]["final_computed"], trimmed_rankings_by_specialty[specialty]["final_ranked"]):
-                print(cscore, rscore)
+        if title == "Closness":
+            for specialty in trimmed_rankings_by_specialty:
+                print(specialty)
+                for cscore, rscore in zip(trimmed_rankings_by_specialty[specialty]["final_computed"], trimmed_rankings_by_specialty[specialty]["final_ranked"]):
+                    print(cscore, rscore)
         """
-
         # calculate evaluations
         evaluations = []
         if hits_n:

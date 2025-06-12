@@ -13,6 +13,11 @@ class EvaluationMethods:
         self.laplacian = None
 
     def subgraph_given_specialty(self, specialty):
+        """
+        get a subgraph of a graph including nodes with the same specialty
+        :param specialty:
+        :return:
+        """
         nodes_of_interest = []
         for node in self.graph.nodes():
             if specialty in self.graph.nodes[node]["specialties"]:
@@ -22,6 +27,18 @@ class EvaluationMethods:
 
     def page_rank(self, subgraph:Graph, alpha=0.85, personalization=None,
                   max_iter=100, tol=1e-06, nstart=None, weight='weight',dangling=None):
+        """
+        get the pagerank centralities for each node in a subgraph
+        :param subgraph:
+        :param alpha:
+        :param personalization:
+        :param max_iter:
+        :param tol:
+        :param nstart:
+        :param weight:
+        :param dangling:
+        :return:
+        """
         page_rank_scores = nx.pagerank(subgraph, alpha, personalization,
                                             max_iter, tol, nstart, weight, dangling)
         # Print the results
@@ -35,6 +52,18 @@ class EvaluationMethods:
 
     def page_rank_all_specialties(self, specialties:list, alpha=0.85, personalization=None,
                   max_iter=100, tol=1e-06, nstart=None, weight='weight',dangling=None):
+        """
+        pagerank all nodesof all specialties
+        :param specialties:
+        :param alpha:
+        :param personalization:
+        :param max_iter:
+        :param tol:
+        :param nstart:
+        :param weight:
+        :param dangling:
+        :return:
+        """
         rankings = {}
         for specialty in specialties:
             spec_subgraph = self.subgraph_given_specialty(specialty)
@@ -44,6 +73,15 @@ class EvaluationMethods:
         return rankings
 
     def laplacian_centrality_helper(self, i, node, full_energy, normalized):
+        """
+        performed for each worker, compute centralitiy of each node by "removing" the node from the graph and
+        recomputing the energy and comparing it to the full energy
+        :param i: index of node to remove/get centrality
+        :param node: node id
+        :param full_energy: energy without anything removed
+        :param normalized: normalize centrality to total
+        :return:
+        """
         # remove row and col i from lap_matrix
         all_but_i = list(np.arange(self.laplacian.shape[0]))
         all_but_i.remove(i)
@@ -199,9 +237,79 @@ class EvaluationMethods:
         return laplace_centralities_dict
 
     def regular_laplacian(self):
+        """
+        get the centralities for all nodes using graph laplacian
+        :return: dict[specialty][ = [scores]
+        """
         ranking = {}
         #centralities = nx.laplacian_centrality(self.graph)
         centralities = self.laplacian_centrality_multiprocessing()
+        for node in centralities:
+            centrality = centralities[node]
+            # add to rankings for specialty
+            for specialty_name in self.graph.nodes[node]["specialties"]:
+                if specialty_name in ranking:
+                    ranking[specialty_name][node] = centrality
+                else:
+                    ranking[specialty_name] = {}
+                    ranking[specialty_name][node] = centrality
+
+        for specialty in ranking:
+            ranking[specialty] = list(ranking[specialty].items())
+
+        return ranking
+
+    def betweenness(self):
+        """
+        get betweenness centralities for each node in graph
+        :return: dict[specialty][ = [scores]
+        """
+        ranking = {}
+        centralities = nx.betweenness_centrality(self.graph)
+        for node in centralities:
+            centrality = centralities[node]
+            # add to rankings for specialty
+            for specialty_name in self.graph.nodes[node]["specialties"]:
+                if specialty_name in ranking:
+                    ranking[specialty_name][node] = centrality
+                else:
+                    ranking[specialty_name] = {}
+                    ranking[specialty_name][node] = centrality
+
+        for specialty in ranking:
+            ranking[specialty] = list(ranking[specialty].items())
+
+        return ranking
+
+    def closeness(self):
+        """
+        get closeness centralities for each node in graph
+        :return: dict[specialty][ = [scores]
+        """
+        ranking = {}
+        centralities = nx.closeness_centrality(self.graph)
+        for node in centralities:
+            centrality = centralities[node]
+            # add to rankings for specialty
+            for specialty_name in self.graph.nodes[node]["specialties"]:
+                if specialty_name in ranking:
+                    ranking[specialty_name][node] = centrality
+                else:
+                    ranking[specialty_name] = {}
+                    ranking[specialty_name][node] = centrality
+
+        for specialty in ranking:
+            ranking[specialty] = list(ranking[specialty].items())
+
+        return ranking
+
+    def load_centrality(self):
+        """
+        get load centralities for each node in graph
+        :return: dict[specialty][ = [scores]
+        """
+        ranking = {}
+        centralities = nx.load_centrality(self.graph)
         for node in centralities:
             centrality = centralities[node]
             # add to rankings for specialty

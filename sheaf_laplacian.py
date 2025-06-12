@@ -46,10 +46,12 @@ class SheafLaplacian:
                 restriction = np.array([pair_percentage, bene_total, same_day_total])
 
                 # check primery weight is correct
+                """
                 if self.graph.nodes[provider]["primary"]:
                     specialty_primary_index = self.graph.nodes[provider]["specialties"].index(self.graph.nodes[provider]["primary"])
                     if self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] != self.primary_specialty_weight:
                         self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] = self.primary_specialty_weight
+                """
                 # add info to array for sparse matrix conversion
                 nonzero_restrictions.extend((self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction)).tolist())
                 nzr_column_indices.extend(self.graph.nodes[provider]["indices"])
@@ -84,10 +86,22 @@ class SheafLaplacian:
 
         return sheaf_lap
 
-    def compute_sheaf_laplacian_energy(self, coboundary_map: sp.sparse.csr_matrix) -> float:
-        return np.sum(coboundary_map.data ** 2)
+    def compute_sheaf_laplacian_energy(self, sheaf_laplacian: sp.sparse.csr_matrix) -> float:
+        """
+        get the energy of the sheaf laplacian, sum of squared components
+        :param sheaf_laplacian: sheaf laplacian matrix to find energy of
+        :return:
+        """
+        return np.sum(sheaf_laplacian.data ** 2)
 
     def compute_centralities_multiprocessing_helper(self, sheaf_laplacian_energy, node, i):
+        """
+        each worker performs this function, finds all specialty centralities for a single node
+        :param sheaf_laplacian_energy: energy of the sheaf laplacian without removing anything
+        :param node: node to get specialty energies for
+        :param i: node number, not needed
+        :return: node id, centralities in order same as node specialties
+        """
         # should be lil
         coboundary_map = self.coboundary_map.copy()
         node_centralities = []
@@ -108,6 +122,10 @@ class SheafLaplacian:
         return node, node_centralities
 
     def compute_centralities_multiprocessing(self):
+        """
+        calculate the centralities for every specialty of every node by removing the column of the specialty
+        :return:
+        """
         print("computing sheaf laplacian energy...")
         start = time.time()
         sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)

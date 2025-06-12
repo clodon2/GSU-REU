@@ -10,7 +10,8 @@ def eval_sheaf_lap():
     graph = graph_builder.build_graph(rows=1000)
     sheaf_laplacian = SheafLaplacian(graph,
                                      graph_builder.coboundary_columns,
-                                     restriction_weights=[1, 1, 1])
+                                     restriction_weights=[1, 1, 1],
+                                     primary_specialty_weight=2)
     eval_compare = CompareData()
     eval_compare.setup_evaluate(graph)
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings()
@@ -36,12 +37,12 @@ def eval_sheaf_lap():
 
 
 def evaluate_all_methods():
-    graph_builder = GraphBuilder(primary_specialty_weight=2)
-    graph = graph_builder.build_graph(rows=10000)
+    graph_builder = GraphBuilder()
+    graph = graph_builder.build_graph(rows=99999999, remove_unscored_nodes_file="pa_scores.csv")
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
-                                     restriction_weights=[0, .23854934, .62817431])
+                                     restriction_weights=[.64, .641, 0], primary_specialty_weight=2)
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings()
     # replace this with some other specialty name list
     specialty_names = list(sheaf_laplacian_rankings.keys())
@@ -55,12 +56,13 @@ def evaluate_all_methods():
     rankings_pr = ev.page_rank_all_specialties(specialty_names)
     print("regular laplacian...")
     rankings_rl = ev.regular_laplacian()
-    print("SIR...")
+    print("closeness...")
+    rankings_c = ev.closeness()
     #rankings_sir = ev.SIR_vectors(specialty_names)
     print("evaluating...")
 
     method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"),
-                       (rankings_rl, "RegularLaplacian")]
+                       (rankings_rl, "RegularLaplacian"), (rankings_c, "Closness")]
     # , (rankings_sir, "SIR")
 
     eval_compare.save_actual_rankings()
@@ -98,7 +100,7 @@ class OptimizeWeights:
 
 
 if __name__ == "__main__":
-    #evaluate_all_methods()
-    ow = OptimizeWeights()
-    print(ow.find_best_weights())
+    evaluate_all_methods()
+    #ow = OptimizeWeights()
+    #print(ow.find_best_weights())
     # suggested weights at 1000: (0.5440900111139723, array([0.69067041, 0.59055783, 0.        ]))

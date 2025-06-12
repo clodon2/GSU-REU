@@ -1,10 +1,9 @@
 import csv
 
-from fontTools.varLib.interpolatableHelpers import find_parents_and_order
+from scipy.stats import spearmanr
 from networkx import Graph
 from random import shuffle
 from math import log2
-
 
 class CompareData:
     def __init__(self, provider_ranking_file:str="pa_scores.csv",
@@ -24,10 +23,10 @@ class CompareData:
                 provider = line[0].strip()
                 # provider for new dataset: 5 old: 0
                 # score for new dataset; 24 old: 11/12
-                if (line[11].strip() == ''):
+                if (line[12].strip() == ''):
                     continue
                 else:
-                    score = float(line[11].strip())
+                    score = float(line[12].strip())
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))
@@ -185,6 +184,40 @@ class CompareData:
 
         return output
 
+    def evaluate_correlation(self, trimmed_rankings):
+        output = {}
+        for specialty in trimmed_rankings:
+            final_computed = self.groupify_same_scores(trimmed_rankings[specialty]["final_computed"])
+            final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])
+
+            # create average rank dictionary for ideal ranking and computed (handle ties)
+            true_positions = {}
+            current_rank = 0
+            for group in final_ranked:
+                avg_rank = current_rank + (len(group) - 1) / 2
+                for item in group:
+                    true_positions[item[0]] = avg_rank
+                current_rank += len(group)
+
+            computed_positions = {}
+            current_rank = 0
+            for group in final_computed:
+                avg_rank = current_rank + (len(group) - 1) / 2
+                for item in group:
+                    computed_positions[item[0]] = avg_rank
+                current_rank += len(group)
+
+            # match computed items to ranks
+            shared_ids = list(set(computed_positions) & set(true_positions))
+
+            computed_ranks = [computed_positions[id] for id in shared_ids]
+            true_ranks = [true_positions[id] for id in shared_ids]
+
+            output[specialty] = spearmanr(true_ranks, computed_ranks).statistic
+
+        return output
+
+
     def slice_by_unique(self, rank_list, n):
         scores = [score for id, score in rank_list]
         last_score = scores[0]
@@ -244,24 +277,16 @@ class CompareData:
             output[specialty] = {}
             final_computed = []
             final_ranked = []
+            computed_ranking_dict = dict(computed_ranking[specialty])
             # only eval for providers that are shared between computed and rank dataset
             for score in self.provider_specialty_ranking[specialty]:
-                for calc_score in computed_ranking[specialty]:
-                    if score[0] == calc_score[0]:
-                        final_computed.append(calc_score)
-                        final_ranked.append(score)
-                        break
+                if score[0] in computed_ranking_dict:
+                    final_computed.append((score[0], computed_ranking_dict[score[0]]))
+                    final_ranked.append(score)
 
             # remove duplicates (move to dict creation probs)
-            for score in final_ranked:
-                count = final_ranked.count(score)
-                for i in range(count - 1):
-                    final_ranked.remove(score)
-
-            for score in final_computed:
-                count = final_computed.count(score)
-                for i in range(count - 1):
-                    final_computed.remove(score)
+            final_ranked = list(dict.fromkeys(final_ranked))
+            final_computed = list(dict.fromkeys(final_computed))
 
             # remove biases
             shuffle(final_computed)
@@ -276,7 +301,7 @@ class CompareData:
 
 
     def evaluate_all_and_save(self, computed_ranking:dict, title="unknonwn",
-                              save_unfiltered=True, hits_n=15, ndcg_n=15, top_specialties=5, save_type="new"):
+                              save_unfiltered=True, hits_n=15, ndcg_n=15, correlation=True, top_specialties=5, save_type="new"):
         if save_unfiltered:
             print(f"Saving unfiltered results to ./results/results_unfiltered{title.strip()}.csv...")
             with open(f"./results/results_unfiltered{title.strip()}.csv", "w", newline='') as unfiltered:
@@ -286,6 +311,12 @@ class CompareData:
                     write.writerow([key, computed_ranking[key]])
 
         trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, top_specialties)
+        """
+        for specialty in trimmed_rankings_by_specialty:
+            print(specialty)
+            for cscore, rscore in zip(trimmed_rankings_by_specialty[specialty]["final_computed"], trimmed_rankings_by_specialty[specialty]["final_ranked"]):
+                print(cscore, rscore)
+        """
 
         # calculate evaluations
         evaluations = []
@@ -295,6 +326,9 @@ class CompareData:
         if ndcg_n:
             ndcg_at_n = self.evaluate_NDCG(trimmed_rankings_by_specialty, ndcg_n)
             evaluations.append((ndcg_at_n, f"NDCG@{ndcg_n}"))
+        if correlation:
+            correlations = self.evaluate_correlation(trimmed_rankings_by_specialty)
+            evaluations.append((correlations, f"Correlation"))
 
         # save evaluations to file
         save_file_name = f"./results/results{title.strip()}.csv"
@@ -310,7 +344,10 @@ class CompareData:
                 specialty_name = specialty
             save_row = [eval[1], specialty_name, eval[0][specialty]]
             for other_eval in evaluations[1:]:
-                save_row.extend([other_eval[1], specialty_name, other_eval[0][specialty]])
+                try:
+                    save_row.extend([other_eval[1], specialty_name, other_eval[0][specialty]])
+                except:
+                    pass
             save_info.append(save_row)
 
         """

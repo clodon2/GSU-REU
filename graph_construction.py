@@ -191,6 +191,7 @@ class GraphBuilder:
         :param score_file_name: the score dataset filename
         :return:
         """
+        print("removing unscored nodes...")
         valid_providers = set()
         with open(score_file_name, "r") as rank_file:
             rank_file = csv.reader(rank_file)

@@ -86,14 +86,6 @@ class SheafLaplacian:
 
         return sheaf_lap
 
-    def compute_sheaf_laplacian_energy(self, sheaf_laplacian: sp.sparse.csr_matrix) -> float:
-        """
-        get the energy of the sheaf laplacian, sum of squared components
-        :param sheaf_laplacian: sheaf laplacian matrix to find energy of
-        :return:
-        """
-        return np.sum(sheaf_laplacian.data ** 2)
-
     def compute_centralities_multiprocessing_helper(self, sheaf_laplacian_energy, node, i):
         """
         each worker performs this function, finds all specialty centralities for a single node
@@ -102,21 +94,21 @@ class SheafLaplacian:
         :param i: node number, not needed
         :return: node id, centralities in order same as node specialties
         """
-        # should be lil
-        coboundary_map = self.coboundary_map.copy()
+        # should be csr
+        coboundary_csr = self.coboundary_map
         node_centralities = []
+        indices = self.graph.nodes[node]["indices"]
         # for each specialty, get the centrality score
-        for specialty, specialty_name in zip(self.graph.nodes[node]["indices"], self.graph.nodes[node]["specialties"]):
-            # "remove" specialty column
-            coboundary_map[:, specialty] = 0
-            # convert to csr for matrix multiplication
-            coboundary_csr = coboundary_map.tocsr()
+        for specialty_index in indices:
+            include_cols = np.ones(coboundary_csr.shape[1], dtype=bool)
+            include_cols[specialty_index] = False
+            sub_coboundary = coboundary_csr[:, include_cols]
+
             # sheaf laplacian of coboundary w/ removed
-            sheaf_laplacian = coboundary_csr.transpose().dot(coboundary_map)
-            spec_energy = self.compute_sheaf_laplacian_energy(sheaf_laplacian)
+            sheaf_laplacian = sub_coboundary.transpose().dot(sub_coboundary)
+            spec_energy = np.sum(sheaf_laplacian.data ** 2)
             # centrality (impact) for each specialty of each node
             centrality = (sheaf_laplacian_energy - spec_energy) / sheaf_laplacian_energy
-
             node_centralities.append(centrality)
 
         return node, node_centralities
@@ -128,10 +120,10 @@ class SheafLaplacian:
         """
         print("computing sheaf laplacian energy...")
         start = time.time()
-        sheaf_laplacian_energy = self.compute_sheaf_laplacian_energy(self.sheaf_laplacian)
+        sheaf_laplacian_energy = np.sum(self.sheaf_laplacian.data ** 2)
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
         # convert coboundary map for column removal later
-        self.coboundary_map = self.coboundary_map.tolil()
+        self.coboundary_map = self.coboundary_map.tocsr()
         pool_args = []
         print("generating pool args")
 
@@ -206,3 +198,12 @@ class SheafLaplacian:
         print(self.coboundary_map)
 
         self.compute_sheaf_laplacian()
+
+"""
+_global_coboundary_csr = None
+_global_graph = None
+def init_worker(graph, coboundary_csr):
+    global _global_graph, _global_coboundary_csr
+    _global_graph = graph
+    _global_coboundary_csr = coboundary_csr
+"""

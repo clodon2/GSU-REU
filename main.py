@@ -38,11 +38,11 @@ def eval_sheaf_lap():
 
 def evaluate_all_methods():
     graph_builder = GraphBuilder()
-    graph = graph_builder.build_graph(rows=99999999, remove_unscored_nodes_file="pa_scores.csv")
+    graph = graph_builder.build_graph(rows=50000, remove_unscored_nodes_file="pa_scores.csv")
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
-                                     restriction_weights=[.64, .641, 0], primary_specialty_weight=2)
+                                     restriction_weights=[.36131, 1.1985, 1.888], primary_specialty_weight=1.0434)
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings()
     # replace this with some other specialty name list
     specialty_names = list(sheaf_laplacian_rankings.keys())
@@ -71,15 +71,15 @@ def evaluate_all_methods():
         ranking = method_info[0]
         title = method_info[1]
         eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=True,
-                                       save_type="write", hits_n=10, ndcg_n=10)
+                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
         for i in range(20, 50, 10):
             eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
-                                               save_type="append", hits_n=i, ndcg_n=i)
+                                               save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
 
 class OptimizeWeights:
     def __init__(self):
         graph_builder = GraphBuilder(primary_specialty_weight=2)
-        graph = graph_builder.build_graph(rows=1000)
+        graph = graph_builder.build_graph(rows=10000, remove_unscored_nodes_file="pa_scores.csv")
         self.sheaf_laplacian = SheafLaplacian(graph=graph,
                                               coboundary_columns=graph_builder.coboundary_columns,
                                               restriction_weights=[1, 1, 1],

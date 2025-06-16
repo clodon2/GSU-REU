@@ -3,6 +3,8 @@ from sheaf_laplacian import SheafLaplacian
 from other_methods import EvaluationMethods
 from data_comparison import CompareData
 from weight_optimize import DifferentialEvolution
+from import_from_outside import get_djalil_coboundary, import_djalil_sheaf_laplacian_centrality, \
+    import_djalil_ground_truth, import_djalil_graph
 
 
 def eval_sheaf_lap():
@@ -38,7 +40,7 @@ def eval_sheaf_lap():
 
 def evaluate_all_methods():
     graph_builder = GraphBuilder()
-    graph = graph_builder.build_graph(rows=50000, remove_unscored_nodes_file="pa_scores.csv")
+    graph = graph_builder.build_graph(rows=100000, remove_unscored_nodes_file="")
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
@@ -99,8 +101,69 @@ class OptimizeWeights:
         return DE.run()
 
 
+def load_djalil_stuff():
+    coboundary_map, graph = get_djalil_coboundary()
+    sheaf_laplacian = SheafLaplacian(graph, 5)
+    sheaf_laplacian.coboundary_map = coboundary_map
+    sheaf_laplacian.compute_sheaf_laplacian()
+    sheaf_laplacian.compute_centralities_multiprocessing()
+    ranking = sheaf_laplacian.get_ranking()
+    return ranking
+
+def eval_djalil_centrality_direct():
+    rankings = import_djalil_sheaf_laplacian_centrality()
+    eval_compare = CompareData()
+    eval_compare.provider_specialty_ranking = import_djalil_ground_truth()
+    specialty_num = 100
+    eval_compare.evaluate_all_and_save(rankings, title="djalilNew", save_unfiltered=True,
+                                       ndcg_n=10, hits_n=10, save_type="write", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="djalilNew", save_unfiltered=False,
+                                       ndcg_n=20, hits_n=20, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="djalilNew", save_unfiltered=False,
+                                       ndcg_n=30, hits_n=30, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="djalilNew", save_unfiltered=False,
+                                       ndcg_n=40, hits_n=40, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="djalilNew", save_unfiltered=False,
+                                       ndcg_n=50, hits_n=50, save_type="append", top_specialties=specialty_num)
+
+def eval_djalil_all():
+    sheaf_laplacian_rankings = import_djalil_sheaf_laplacian_centrality()
+    eval_compare = CompareData()
+    eval_compare.provider_specialty_ranking = import_djalil_ground_truth()
+    specialty_num = 100
+
+    graph = import_djalil_graph()
+
+    ev = EvaluationMethods(graph)
+
+    print("page ranking...")
+    rankings_pr = ev.page_rank_all_specialties(eval_compare.get_top_spec_names(specialty_num))
+    print("regular laplacian...")
+    rankings_rl = ev.regular_laplacian()
+    print("closeness...")
+    rankings_c = ev.closeness()
+    #rankings_sir = ev.SIR_vectors(specialty_names)
+    print("evaluating...")
+
+    method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"),
+                       (rankings_rl, "RegularLaplacian"), (rankings_c, "Closness")]
+    # , (rankings_sir, "SIR")
+
+    eval_compare.save_actual_rankings()
+
+    for method_info in method_rankings:
+        ranking = method_info[0]
+        title = method_info[1]
+        eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=True,
+                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=specialty_num)
+        for i in range(20, 50, 10):
+            eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
+                                               save_type="append", hits_n=i, ndcg_n=i, top_specialties=specialty_num)
+
+
 if __name__ == "__main__":
-    evaluate_all_methods()
+    eval_djalil_all()
+    #evaluate_all_methods()
     #ow = OptimizeWeights()
     #print(ow.find_best_weights())
     # suggested weights at 1000: (0.5440900111139723, array([0.69067041, 0.59055783, 0.        ]))

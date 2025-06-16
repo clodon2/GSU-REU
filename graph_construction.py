@@ -1,5 +1,3 @@
-from os import remove
-
 import networkx as nx
 import time
 import csv
@@ -11,7 +9,7 @@ from matplotlib import colormaps
 class GraphBuilder:
     def __init__(self, primary_specialty_weight:float=2,
                  provider_data_file:str="pa_data.txt",
-                 specialty_data_file:str="specialty_reformatted.csv",
+                 specialty_data_file:str="specialty_2015_reformatted.csv",
                  graph_data_file:str="physician_graph.gexf"):
         """
         create provider graph manager

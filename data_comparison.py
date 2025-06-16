@@ -151,7 +151,6 @@ class CompareData:
 
             # get trimmed rankings
             final_computed = trimmed_rankings[specialty]["final_computed"][:n]
-            final_ranked = trimmed_rankings[specialty]["final_ranked"][:n]
             final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])[:n]
 
             counted = set()
@@ -198,6 +197,8 @@ class CompareData:
         for specialty in trimmed_rankings:
             final_computed = trimmed_rankings[specialty]["final_computed"][:n]
             final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])[:n]
+            if not final_ranked or not final_computed:
+                print(specialty, self.provider_specialty_ranking[specialty], trimmed_rankings[specialty])
 
             # need to create a placing dictionary for distance comparison
             id_to_ideal_positions = {}
@@ -274,29 +275,6 @@ class CompareData:
 
         return output
 
-
-    def slice_by_unique(self, rank_list, n):
-        """
-        deprecated, slice a score list to the nth unique score entries
-        :param rank_list: list of tuples [(id, score)]
-        :param n: unique scores to include
-        :return: sliced list at unique number of n
-        """
-        scores = [score for id, score in rank_list]
-        last_score = scores[0]
-        us_i = 0
-        unique_scores = [0]
-        for score in scores:
-            # assume scores are sorted, if still same add to count
-            if last_score == score:
-                unique_scores[us_i] += 1
-            else:
-                unique_scores.append(1)
-                us_i += 1
-
-        actual_n = sum(unique_scores[:n])
-        return rank_list[:actual_n]
-
     def groupify_same_scores(self, rank_list):
         """
         group scores into a list of lists where each sub-list is nodes with the same score
@@ -304,6 +282,8 @@ class CompareData:
         :param rank_list: a sorted list of tuples [(node, score)]
         :return: list of lists
         """
+        if not rank_list:
+            return []
         grouped_rankings = [[rank_list[0]]]
         group_index = 0
         last_score = rank_list[0]
@@ -322,9 +302,8 @@ class CompareData:
     def trim_rankings(self, computed_ranking:dict, n):
         """
         trim rankings to top n specialties
-        :param final_ranking: ranking from rank database
         :param computed_ranking: ranking computed
-        :param n: number of top specialties to include
+        :param n: number of elements specialties must have to be included
         :return: dict of specialty: dict of label:ranking
         """
         output = {}
@@ -332,14 +311,15 @@ class CompareData:
         # only get results for top 5 specialties
         specialty_scores = []
         for specialty in self.provider_specialty_ranking:
-            specialty_scores.append((specialty, len(self.provider_specialty_ranking[specialty])))
+            if (specialty in computed_ranking and len(self.provider_specialty_ranking[specialty]) > n and
+                    len(computed_ranking[specialty]) > n):
+                specialty_scores.append((specialty, len(self.provider_specialty_ranking[specialty])))
 
         specialty_scores = sorted(specialty_scores, key=lambda item: item[1], reverse=True)
-        specialty_scores = specialty_scores[:n]
+        specialty_scores = specialty_scores
         top_specialties_names = [specialty_info[0] for specialty_info in specialty_scores]
 
         for specialty in top_specialties_names:
-            output[specialty] = {}
             final_computed = []
             final_ranked = []
             computed_ranking_dict = dict(computed_ranking[specialty])
@@ -350,7 +330,22 @@ class CompareData:
                     final_ranked.append(score)
 
             # remove duplicates (move to dict creation probs)
-            final_ranked = list(dict.fromkeys(final_ranked))
+            duplicate_score_info = {}
+            for entry in final_ranked:
+                if entry[0] in duplicate_score_info:
+                    duplicate_score_info[entry[0]]["total"] += entry[1]
+                    duplicate_score_info[entry[0]]["number"] += 1
+                else:
+                    duplicate_score_info[entry[0]] = {}
+                    duplicate_score_info[entry[0]]["total"] = entry[1]
+                    duplicate_score_info[entry[0]]["number"] = 1
+
+            averaged_final = []
+            for entry in final_ranked:
+                mean = duplicate_score_info[entry[0]]["total"] / duplicate_score_info[entry[0]]["number"]
+                averaged_final.append((entry[0], mean))
+
+            final_ranked = list(dict.fromkeys(averaged_final))
             final_computed = list(dict.fromkeys(final_computed))
 
             # remove biases, need to check this
@@ -359,8 +354,10 @@ class CompareData:
             final_ranked = sorted(final_ranked, key=lambda item: item[1], reverse=True)
             final_computed = sorted(final_computed, key=lambda item: item[1], reverse=True)
 
-            output[specialty]["final_computed"] = final_computed
-            output[specialty]["final_ranked"] = final_ranked
+            if final_computed and final_ranked:
+                output[specialty] = {}
+                output[specialty]["final_computed"] = final_computed
+                output[specialty]["final_ranked"] = final_ranked
 
         return output
 
@@ -508,3 +505,15 @@ class CompareData:
                 extracted_dict[specialty] = cleaned_rankings
 
         return extracted_dict
+
+    def get_top_spec_names(self, n):
+        # only get results for top 5 specialties
+        specialty_scores = []
+        for specialty in self.provider_specialty_ranking:
+            if (len(self.provider_specialty_ranking[specialty]) > n):
+                specialty_scores.append((specialty, len(self.provider_specialty_ranking[specialty])))
+
+        specialty_scores = sorted(specialty_scores, key=lambda item: item[1], reverse=True)
+        specialty_scores = specialty_scores
+        top_specialties_names = [specialty_info[0] for specialty_info in specialty_scores]
+        return top_specialties_names

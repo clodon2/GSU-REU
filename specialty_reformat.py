@@ -2,7 +2,8 @@ import csv
 import json
 
 
-def create_new_specialty_csv():
+def create_new_specialty_csv(input_filename="specialty_data.csv",
+                             output_filename="specialty_reformatted.csv"):
     """
     trim csv dataset file to only get necessary rows
     :return: None
@@ -10,7 +11,7 @@ def create_new_specialty_csv():
     lines_read = 0
     taxonomy_columns = []
     switch_columns = []
-    with open("specialty_data.csv", "r") as data, open("specialty_reformatted.csv", "w", newline='') as reformatted:
+    with open(input_filename, "r") as data, open(output_filename, "w", newline='') as reformatted:
         csv_reader = csv.reader(data)
         csv_writer = csv.writer(reformatted)
         for line in csv_reader:
@@ -96,5 +97,6 @@ def add_key_value_to_json(key, value):
 
 
 if __name__ == "__main__":
-    create_new_specialty_csv()
+    create_new_specialty_csv(input_filename="specialty_2015.csv",
+                             output_filename="specialty_2015_reformatted.csv")
     #create_new_specialty_json()

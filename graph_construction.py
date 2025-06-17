@@ -106,13 +106,17 @@ class GraphBuilder:
         start = time.time()
         self.import_txt_data(rows=rows)
         if remove_unscored_nodes_file:
-            self.remove_unscored_nodes(remove_unscored_nodes_file)
+            self.remove_unscored_nodes_new(remove_unscored_nodes_file)
         self.add_specialties_fast()
         self.sheaf_specialty_conversion()
         self.add_provider_totals()
         end = time.time()
         print(f"graph built in {end - start}")
         return self.graph
+
+    def get_graph_stats(self):
+        print("Nodes:", self.graph.number_of_nodes())
+        print("Edges:", self.graph.number_of_edges())
 
     def save_graph(self):
         """
@@ -195,10 +199,36 @@ class GraphBuilder:
             rank_file = csv.reader(rank_file)
             next(rank_file)
             for line in rank_file:
-                provider = int(line[0].strip())
-                # provider for new dataset: 5 old: 0
+                provider = int(line[5].strip())
                 valid_providers.add(provider)
 
+        unscored_nodes = [node for node in self.graph.nodes if node not in valid_providers]
+        print(f"removed {len(unscored_nodes)} no score nodes")
+
+        self.graph.remove_nodes_from(unscored_nodes)
+
+    def remove_unscored_nodes_new(self, score_file_name):
+        """
+        removes nodes that do not have a score in the scoring dataset from the graph
+        :param score_file_name: the score dataset filename
+        :return:
+        """
+        print("removing unscored nodes...")
+        valid_providers = set()
+        with open(score_file_name, "r") as rank_file:
+            rank_file = csv.reader(rank_file)
+            next(rank_file)
+            for line in rank_file:
+                provider = int(line[0].strip())
+                quality = line[7].strip()
+                pi = line[8].strip()
+                ia = line[9].strip()
+                cost = line[10].strip()
+                # provider for new dataset: 5 old: 0
+                if quality and pi and ia and cost:
+                    valid_providers.add(provider)
+
+        print(len(valid_providers))
         unscored_nodes = [node for node in self.graph.nodes if node not in valid_providers]
         print(f"removed {len(unscored_nodes)} no score nodes")
 

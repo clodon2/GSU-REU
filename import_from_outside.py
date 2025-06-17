@@ -35,6 +35,7 @@ def get_djalil_coboundary():
     node_dimension = {}
     for node in list(graph.nodes()):
         sp_vec_len = len(graph.nodes[node]["specialties"])  # Lenght of specialties_vector = specialties
+        graph.nodes[node]["edge_indices"] = []
         node_dimension[node] = sp_vec_len
 
     # Step 2: Assign global column indices to each node's specialties
@@ -44,7 +45,7 @@ def get_djalil_coboundary():
         node_indices[node] = list(
             range(col, col + dim))  # look like {"node1": [1], "node2":[2,3], "node3": [4], "node4": [5,6,7]}
         col += dim
-        graph.nodes[node]["indicies"] = node_indices[node]
+        graph.nodes[node]["indices"] = node_indices[node]
     node_indices = node_indices
 
     cols_num = col  # Total columns = sum of all vertex dimensions
@@ -65,6 +66,8 @@ def get_djalil_coboundary():
     for edg_idx, (edge, (u, v, u_v_rest_map, v_u_rest_map)) in enumerate(edges_tail_head.items()):
         # u = tail, v = head
         # Add u_v_rest_map to columns of u
+        graph.nodes[u]["edge_indices"].append(edg_idx)
+        graph.nodes[v]["edge_indices"].append(edg_idx)
         for col_idx_u, val_u in zip(node_indices[u], u_v_rest_map):
             nonzero_restriction_map.append(val_u)
             nrm_rows_indices.append(edg_idx)

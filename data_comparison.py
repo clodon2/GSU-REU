@@ -30,12 +30,11 @@ class CompareData:
             providers = {}
             for line in rank_file:
                 provider = line[0].strip()
-                # provider for new dataset: 5 old: 0
-                # score for new dataset; 24 old: 11/12
-                if (line[11].strip() == ''):
+                # quality=7, pi=8, ia=9, cost=10, mip=11, mip_plus_bonus=12
+                if (line[12].strip() == ''):
                     continue
                 else:
-                    score = float(line[11].strip())
+                    score = float(line[12].strip())
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))

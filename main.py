@@ -2,9 +2,11 @@ from graph_construction import GraphBuilder
 from sheaf_laplacian import SheafLaplacian
 from other_methods import EvaluationMethods
 from data_comparison import CompareData
+from data_comparison_no_specialty import CompareDataNoSpecialty
 from weight_optimize import DifferentialEvolution
 from import_from_outside import get_djalil_coboundary, import_djalil_sheaf_laplacian_centrality, \
     import_djalil_ground_truth, import_djalil_graph
+from dataset_analysis import get_score_correlation
 
 
 def eval_sheaf_lap():
@@ -106,9 +108,43 @@ def load_djalil_stuff():
     sheaf_laplacian = SheafLaplacian(graph, 5)
     sheaf_laplacian.coboundary_map = coboundary_map
     sheaf_laplacian.compute_sheaf_laplacian()
-    sheaf_laplacian.compute_centralities_multiprocessing()
-    ranking = sheaf_laplacian.get_ranking()
+    ranking = sheaf_laplacian.compute_centralities_multiprocessing()
     return ranking
+
+def eval_djalil_no_spec():
+    coboundary_map, graph = get_djalil_coboundary()
+    sheaf_laplacian = SheafLaplacian(graph, 5, primary_specialty_weight=1)
+    sheaf_laplacian.coboundary_map = coboundary_map
+    sheaf_laplacian.compute_sheaf_laplacian()
+    rankings = sheaf_laplacian.compute_centralities_multiprocessing_remove_whole()
+    eval_compare = CompareDataNoSpecialty()
+    specialty_num = 100
+    eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=True,
+                                       ndcg_n=10, hits_n=10, save_type="write", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=False,
+                                       ndcg_n=20, hits_n=20, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=False,
+                                       ndcg_n=30, hits_n=30, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=False,
+                                       ndcg_n=40, hits_n=40, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=False,
+                                       ndcg_n=50, hits_n=50, save_type="append", top_specialties=specialty_num)
+
+def eval_djalil_normal():
+    rankings = load_djalil_stuff()
+    eval_compare = CompareData()
+    eval_compare.provider_specialty_ranking = import_djalil_ground_truth()
+    specialty_num = 100
+    eval_compare.evaluate_all_and_save(rankings, title="djalilSheaf", save_unfiltered=True,
+                                       ndcg_n=10, hits_n=10, save_type="write", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="djalilSheaf", save_unfiltered=False,
+                                       ndcg_n=20, hits_n=20, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="djalilSheaf", save_unfiltered=False,
+                                       ndcg_n=30, hits_n=30, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="djalilSheaf", save_unfiltered=False,
+                                       ndcg_n=40, hits_n=40, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="djalilSheaf", save_unfiltered=False,
+                                       ndcg_n=50, hits_n=50, save_type="append", top_specialties=specialty_num)
 
 def eval_djalil_centrality_direct():
     rankings = import_djalil_sheaf_laplacian_centrality()
@@ -130,7 +166,7 @@ def eval_djalil_all():
     sheaf_laplacian_rankings = import_djalil_sheaf_laplacian_centrality()
     eval_compare = CompareData()
     eval_compare.provider_specialty_ranking = import_djalil_ground_truth()
-    specialty_num = 100
+    specialty_num = 5
 
     graph = import_djalil_graph()
 
@@ -140,13 +176,11 @@ def eval_djalil_all():
     rankings_pr = ev.page_rank_all_specialties(eval_compare.get_top_spec_names(specialty_num))
     print("regular laplacian...")
     rankings_rl = ev.regular_laplacian()
-    print("closeness...")
-    rankings_c = ev.closeness()
     #rankings_sir = ev.SIR_vectors(specialty_names)
     print("evaluating...")
 
     method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"),
-                       (rankings_rl, "RegularLaplacian"), (rankings_c, "Closness")]
+                       (rankings_rl, "RegularLaplacian")]
     # , (rankings_sir, "SIR")
 
     eval_compare.save_actual_rankings()
@@ -156,13 +190,19 @@ def eval_djalil_all():
         title = method_info[1]
         eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=True,
                                        save_type="write", hits_n=10, ndcg_n=10, top_specialties=specialty_num)
-        for i in range(20, 50, 10):
+        for i in range(20, 60, 10):
             eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
                                                save_type="append", hits_n=i, ndcg_n=i, top_specialties=specialty_num)
 
+def get_type_correlation():
+    gb = GraphBuilder()
+    graph = gb.build_graph(remove_unscored_nodes_file="pa_scores.csv")
+    gb.get_graph_stats()
+    get_score_correlation(graph, "pa_scores.csv")
 
 if __name__ == "__main__":
-    eval_djalil_all()
+    #get_type_correlation()
+    eval_djalil_no_spec()
     #evaluate_all_methods()
     #ow = OptimizeWeights()
     #print(ow.find_best_weights())

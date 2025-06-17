@@ -102,7 +102,7 @@ class EvaluationMethods:
 
         return node, lapl_cent
 
-    def laplacian_centrality_multiprocessing(self, normalized=True, nodelist=None, weight="weight",
+    def laplacian_centrality_multiprocessing(self, subgraph:Graph, normalized=True, nodelist=None, weight="weight",
                                              walk_type=None, alpha=0.95):
         r"""FROM nx.algorithms.centrality.laplacian
 
@@ -186,7 +186,7 @@ class EvaluationMethods:
         :func:`~networkx.linalg.laplacianmatrix.directed_laplacian_matrix`
         :func:`~networkx.linalg.laplacianmatrix.laplacian_matrix`
         """
-        G = self.graph
+        G = subgraph
         if len(G) == 0:
             raise nx.NetworkXPointlessConcept("null graph has no centrality defined")
         if G.size(weight=weight) == 0:
@@ -236,26 +236,16 @@ class EvaluationMethods:
 
         return laplace_centralities_dict
 
-    def regular_laplacian(self):
+    def regular_laplacian(self, specialties:list):
         """
         get the centralities for all nodes using graph laplacian
+        :param specialties: list of specialty names to subgraph and find centralities
         :return: dict[specialty][ = [scores]
         """
         ranking = {}
-        #centralities = nx.laplacian_centrality(self.graph)
-        centralities = self.laplacian_centrality_multiprocessing()
-        for node in centralities:
-            centrality = centralities[node]
-            # add to rankings for specialty
-            for specialty_name in self.graph.nodes[node]["specialties"]:
-                if specialty_name in ranking:
-                    ranking[specialty_name][node] = centrality
-                else:
-                    ranking[specialty_name] = {}
-                    ranking[specialty_name][node] = centrality
-
-        for specialty in ranking:
-            ranking[specialty] = list(ranking[specialty].items())
+        for specialty in specialties:
+            centralities = self.laplacian_centrality_multiprocessing(self.subgraph_given_specialty(specialty))
+            ranking[specialty] = list(centralities.items())
 
         return ranking
 
@@ -278,6 +268,14 @@ class EvaluationMethods:
 
         for specialty in ranking:
             ranking[specialty] = list(ranking[specialty].items())
+
+        return ranking
+
+    def degrees(self, specialties:list):
+        ranking = {}
+        for specialty in specialties:
+            centralities = nx.degree_centrality(self.subgraph_given_specialty(specialty))
+            ranking[specialty] = list(centralities.items())
 
         return ranking
 

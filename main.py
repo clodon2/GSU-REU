@@ -49,24 +49,24 @@ def evaluate_all_methods():
                                      restriction_weights=[.36131, 1.1985, 1.888], primary_specialty_weight=1.0434)
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings()
     # replace this with some other specialty name list
-    specialty_names = list(sheaf_laplacian_rankings.keys())
 
     eval_compare = CompareData()
     eval_compare.setup_evaluate(graph)
+
+    specialty_names = eval_compare.get_top_spec_names(5)
 
     ev = EvaluationMethods(graph)
 
     print("page ranking...")
     rankings_pr = ev.page_rank_all_specialties(specialty_names)
     print("regular laplacian...")
-    rankings_rl = ev.regular_laplacian()
-    print("closeness...")
-    rankings_c = ev.closeness()
-    #rankings_sir = ev.SIR_vectors(specialty_names)
+    rankings_rl = ev.regular_laplacian(specialty_names)
+    print("degrees...")
+    rankings_dg = ev.degrees(specialty_names)
     print("evaluating...")
 
     method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"),
-                       (rankings_rl, "RegularLaplacian"), (rankings_c, "Closness")]
+                       (rankings_rl, "RegularLaplacian"), (rankings_dg, "Degrees")]
     # , (rankings_sir, "SIR")
 
     eval_compare.save_actual_rankings()
@@ -175,13 +175,12 @@ def eval_djalil_all():
     print("page ranking...")
     rankings_pr = ev.page_rank_all_specialties(eval_compare.get_top_spec_names(specialty_num))
     print("regular laplacian...")
-    rankings_rl = ev.regular_laplacian()
-    #rankings_sir = ev.SIR_vectors(specialty_names)
-    print("evaluating...")
+    rankings_rl = ev.regular_laplacian(eval_compare.get_top_spec_names(specialty_num))
+    print("degrees...")
+    rankings_dg = ev.degrees(eval_compare.get_top_spec_names(specialty_num))
 
     method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"),
-                       (rankings_rl, "RegularLaplacian")]
-    # , (rankings_sir, "SIR")
+                       (rankings_rl, "RegularLaplacian"), (rankings_dg, "Degrees")]
 
     eval_compare.save_actual_rankings()
 

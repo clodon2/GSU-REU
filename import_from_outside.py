@@ -4,7 +4,7 @@ from scipy.sparse import csr_matrix
 
 
 def import_djalil_graph():
-    file_name = "./datasets/graph_with_attributes.gpickle"
+    file_name = "./datasets/graph_with_attributes_one.gpickle"
     graph = load(file_name)
     return graph
 

@@ -88,7 +88,7 @@ class GraphBuilder:
             try:
                 spec = self.graph.nodes[node]["specialties"]
                 prim = self.graph.nodes[node]["primary"]
-                if not prim or not spec:
+                if not spec:
                     remove_nodes.append(node)
             except:
                 remove_nodes.append(node)
@@ -98,7 +98,6 @@ class GraphBuilder:
             self.graph.remove_node(node)
 
         print(f"{len(remove_nodes)} no specialty nodes removed")
-        print(self.graph.number_of_nodes(), self.graph.number_of_edges())
 
     def build_graph(self, rows=999999999999999999, remove_unscored_nodes_file=''):
         """
@@ -111,6 +110,7 @@ class GraphBuilder:
         if remove_unscored_nodes_file:
             self.remove_unscored_nodes_new(remove_unscored_nodes_file)
         self.add_specialties_fast()
+        self.remove_other_connections()
         self.sheaf_specialty_conversion()
         self.add_provider_totals()
         end = time.time()
@@ -223,11 +223,12 @@ class GraphBuilder:
             next(rank_file)
             for line in rank_file:
                 provider = int(line[0].strip())
-                quality = line[7].strip()
-                pi = line[8].strip()
-                ia = line[9].strip()
-                cost = line[10].strip()
-                final = line[12].strip()
+                primary_spec = line[1].strip()
+                quality = line[3].strip()
+                pi = line[4].strip()
+                ia = line[5].strip()
+                cost = line[6].strip()
+                final = line[8].strip()
                 scores = [quality, pi, ia, cost, final]
                 converted = []
                 for score in scores:
@@ -236,7 +237,7 @@ class GraphBuilder:
                         new_score = float(score)
                     converted.append(new_score)
                 # provider for new dataset: 5 old: 0
-                if scores[0] and scores[1] and scores[2] and scores[3] and scores[4]:
+                if converted[0] and converted[1] and converted[2] and converted[3] and converted[4] and primary_spec:
                     valid_providers.add(provider)
 
         print(len(valid_providers))
@@ -250,10 +251,47 @@ class GraphBuilder:
         removes any weakly connected components from the graph
         :return:
         """
-        components = nx.connected_components(self.graph)
+        components = list(nx.connected_components(self.graph))
         for component in components:
             if len(component) <= (.05 * self.graph.number_of_nodes()):
                 self.graph.remove_nodes_from(component)
+
+    def remove_other_connections(self):
+        num_nodes = self.graph.number_of_nodes()
+        components = list(nx.connected_components(self.graph))
+        for i, component in enumerate(components):
+            if i > 0:
+                self.graph.remove_nodes_from(component)
+
+        print(len(components[0]), "cc")
+
+        print(num_nodes - self.graph.number_of_nodes(), "unconnected nodes removed")
+
+    def remove_non_overlap_specialties(self, specialty_file):
+        print("removing non overlap nodes...")
+        specialty_dict = {}
+        with open(specialty_file, "r") as actual_specialty_info:
+            actual_specialty_info = csv.reader(actual_specialty_info)
+            next(actual_specialty_info)
+            for row in actual_specialty_info:
+                npi = int(row[0].strip())
+                specialties = row[2].strip().split(",")
+                clean_specialties = []
+                for specialty in specialties:
+                    clean_specialties.append(specialty[:10])
+                specialty_dict[npi] = clean_specialties
+
+        remove_nodes = []
+        for npi in self.graph.nodes:
+            if npi in specialty_dict:
+                overlapping_specialties = set(specialty_dict[npi]) | set(self.graph.nodes[npi]["specialties"])
+                if not overlapping_specialties:
+                    remove_nodes.append(npi)
+                else:
+                    self.graph.nodes[npi]["specialties"] = overlapping_specialties
+            else:
+                remove_nodes.append(npi)
+
 
     def draw_graph(self, edge_colors: bool = True, edge_labels: bool = True):
         """

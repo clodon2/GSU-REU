@@ -354,7 +354,6 @@ class CompareDataNoSpecialty:
             extract = csv.reader(extract_file)
             extracted_list = []
             for row in extract:
-                print(row)
                 npi = int(row[0].strip())
                 score = float(row[1].strip())
                 extracted_list.append((npi, score))
@@ -364,7 +363,6 @@ class CompareDataNoSpecialty:
 def add_specialties(ranking:list, graph:Graph):
     specialty_ranking = {}
     for entry in ranking:
-        print(entry)
         npi = entry[0]
         score = entry[1]
         for specialty in graph.nodes[npi]["specialties"]:

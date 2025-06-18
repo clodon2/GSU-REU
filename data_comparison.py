@@ -7,7 +7,8 @@ from math import log2
 
 class CompareData:
     def __init__(self, provider_ranking_file:str="pa_scores.csv",
-                 taxonomy_info_file:str="taxonomy_info.csv"):
+                 taxonomy_info_file:str="taxonomy_info.csv",
+                 specialty_info_file:str="pa_scores_new.csv"):
         """
         object used to compare computed rankings to the ground truth
         :param provider_ranking_file: filename of ground truth dataset
@@ -15,6 +16,7 @@ class CompareData:
         """
         self.provider_ranking_file = provider_ranking_file
         self.taxonomy_info_file = taxonomy_info_file
+        self.specialty_info_file = specialty_info_file
         self.provider_ranking = []
         self.provider_specialty_ranking = {}
         self.taxonomy_info = {}
@@ -54,11 +56,37 @@ class CompareData:
             for line in tax_file:
                 self.taxonomy_info[line[2].strip()] = line[3].strip()
 
-    def add_provider_specialties(self, graph:Graph):
+    def add_provider_specialties(self):
         """
         add specialty sorting to imported data
         :param graph: graph to get specialty information from
         :return:
+        """
+        specialty_dict = {}
+        with open(self.specialty_info_file, "r") as specialty_info:
+            spec_info = csv.reader(specialty_info)
+            next(spec_info)
+            for row in spec_info:
+                npi = int(row[0].strip())
+                specialties = row[2]
+                if specialties:
+                    specialties = row[2].strip().split(",")
+                    cleaned_specialties = []
+                    for specialty in specialties:
+                        cleaned_specialties.append(specialty[:10])
+
+                    specialty_dict[npi] = cleaned_specialties
+
+        for entry in self.provider_ranking:
+            npi = int(entry[0])
+            if npi in specialty_dict:
+                for specialty in specialty_dict[npi]:
+                    if specialty in self.provider_specialty_ranking:
+                        self.provider_specialty_ranking[specialty].append(entry)
+                    else:
+                        self.provider_specialty_ranking[specialty] = []
+                        self.provider_specialty_ranking[specialty].append(entry)
+
         """
         for entry in self.provider_ranking:
             provider = int(entry[0])
@@ -72,6 +100,7 @@ class CompareData:
                     else:
                         self.provider_specialty_ranking[specialty] = []
                         self.provider_specialty_ranking[specialty].append(entry)
+        """
 
     def sort_scores(self):
         """
@@ -83,14 +112,14 @@ class CompareData:
             values = self.provider_specialty_ranking[specialty]
             self.provider_specialty_ranking[specialty] = sorted(values, key=lambda item: item[1], reverse=True)
 
-    def setup_evaluate(self, graph:Graph):
+    def setup_evaluate(self):
         """
         setup comparison object for evaluation
         :param graph: graph to get specialty info from
         :return:
         """
         self.import_provider_ranking()
-        self.add_provider_specialties(graph)
+        self.add_provider_specialties()
         self.import_taxonomy_info()
         self.sort_scores()
 

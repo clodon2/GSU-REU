@@ -218,12 +218,12 @@ def get_real_ranking_all_spec_removal():
     rankings = eval_compare.extract_ranking("./results/results_unfilteredWhole.csv")
     convert_rank = add_specialties(rankings, graph)
     eval_compare = CompareData()
-    eval_compare.setup_evaluate(graph)
+    eval_compare.setup_evaluate()
     eval_compare.evaluate_all_and_save(convert_rank, title="WholeAll", save_unfiltered=False,
-                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=100)
+                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=25)
     for i in range(20, 60, 10):
         eval_compare.evaluate_all_and_save(convert_rank, title="WholeAll", save_unfiltered=False,
-                                           save_type="append", hits_n=i, ndcg_n=i, top_specialties=100)
+                                           save_type="append", hits_n=i, ndcg_n=i, top_specialties=25)
 
 def get_type_correlation():
     gb = GraphBuilder()
@@ -231,9 +231,25 @@ def get_type_correlation():
     gb.get_graph_stats()
     get_score_correlation(graph, "pa_scores.csv")
 
+def build_graph_test():
+    gb = GraphBuilder()
+    graph = gb.build_graph(remove_unscored_nodes_file="pa_scores_new.csv")
+    gb.get_graph_stats()
+    coboundary_map, dgraph = get_djalil_coboundary()
+    diff_nodes = []
+    for node in dgraph.nodes:
+        if node not in graph.nodes:
+            diff_nodes.append(node)
+
+    print(len(diff_nodes), dgraph.number_of_nodes() - graph.number_of_nodes())
+    for node in diff_nodes:
+        print(node, dgraph.nodes[node])
+
+
 if __name__ == "__main__":
+    get_real_ranking_all_spec_removal()
     #get_type_correlation()
-    eval_djalil_centrality_direct()
+    #eval_djalil_centrality_direct()
     #eval_djalil_no_spec_import()
     #evaluate_all_methods()
     #ow = OptimizeWeights()

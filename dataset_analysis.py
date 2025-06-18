@@ -11,12 +11,19 @@ def get_score_correlation(graph:Graph, score_file:str="pa_scores.csv"):
         for line in scores_csv:
             provider = int(line[0].strip())
             if provider in graph.nodes:
-                final = float(line[12].strip())
-                quality = float(line[7].strip())
-                pi = float(line[8].strip())
-                ia = float(line[9].strip())
-                cost = float(line[10].strip())
+                final = (line[12].strip())
+                quality = (line[7].strip())
+                pi = (line[8].strip())
+                ia = (line[9].strip())
+                cost = (line[10].strip())
                 node_scores[provider] = [final, quality, pi, ia, cost]
+                converted = []
+                for score in node_scores[provider]:
+                    if score:
+                        converted.append(float(score))
+                    else:
+                        converted.append(0)
+                node_scores[provider] = converted
 
     correlation_dict = {}
     for i, score_type in enumerate(["mips", "quality", "pi", "ia", "cost"]):

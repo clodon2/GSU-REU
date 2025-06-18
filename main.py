@@ -2,7 +2,7 @@ from graph_construction import GraphBuilder
 from sheaf_laplacian import SheafLaplacian
 from other_methods import EvaluationMethods
 from data_comparison import CompareData
-from data_comparison_no_specialty import CompareDataNoSpecialty
+from data_comparison_no_specialty import CompareDataNoSpecialty, add_specialties
 from weight_optimize import DifferentialEvolution
 from import_from_outside import get_djalil_coboundary, import_djalil_sheaf_laplacian_centrality, \
     import_djalil_ground_truth, import_djalil_graph
@@ -42,7 +42,7 @@ def eval_sheaf_lap():
 
 def evaluate_all_methods():
     graph_builder = GraphBuilder()
-    graph = graph_builder.build_graph(rows=100000, remove_unscored_nodes_file="")
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="pa_scores.csv")
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
@@ -76,7 +76,7 @@ def evaluate_all_methods():
         title = method_info[1]
         eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=True,
                                        save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
-        for i in range(20, 50, 10):
+        for i in range(20, 60, 10):
             eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
                                                save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
 
@@ -129,6 +129,25 @@ def eval_djalil_no_spec():
                                        ndcg_n=40, hits_n=40, save_type="append", top_specialties=specialty_num)
     eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=False,
                                        ndcg_n=50, hits_n=50, save_type="append", top_specialties=specialty_num)
+
+
+def eval_djalil_no_spec_import():
+    coboundary_map, graph = get_djalil_coboundary()
+    eval_compare = CompareDataNoSpecialty()
+    rankings = eval_compare.extract_ranking("./results/results_unfilteredWhole.csv")
+    eval_compare.setup_evaluate(graph)
+    specialty_num = 100
+    eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=False,
+                                       ndcg_n=10, hits_n=10, save_type="write", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=False,
+                                       ndcg_n=20, hits_n=20, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=False,
+                                       ndcg_n=30, hits_n=30, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=False,
+                                       ndcg_n=40, hits_n=40, save_type="append", top_specialties=specialty_num)
+    eval_compare.evaluate_all_and_save(rankings, title="Whole", save_unfiltered=False,
+                                       ndcg_n=50, hits_n=50, save_type="append", top_specialties=specialty_num)
+
 
 def eval_djalil_normal():
     rankings = load_djalil_stuff()
@@ -193,6 +212,19 @@ def eval_djalil_all():
             eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
                                                save_type="append", hits_n=i, ndcg_n=i, top_specialties=specialty_num)
 
+def get_real_ranking_all_spec_removal():
+    coboundary_map, graph = get_djalil_coboundary()
+    eval_compare = CompareDataNoSpecialty()
+    rankings = eval_compare.extract_ranking("./results/results_unfilteredWhole.csv")
+    convert_rank = add_specialties(rankings, graph)
+    eval_compare = CompareData()
+    eval_compare.setup_evaluate(graph)
+    eval_compare.evaluate_all_and_save(convert_rank, title="WholeAll", save_unfiltered=False,
+                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=100)
+    for i in range(20, 60, 10):
+        eval_compare.evaluate_all_and_save(convert_rank, title="WholeAll", save_unfiltered=False,
+                                           save_type="append", hits_n=i, ndcg_n=i, top_specialties=100)
+
 def get_type_correlation():
     gb = GraphBuilder()
     graph = gb.build_graph(remove_unscored_nodes_file="pa_scores.csv")
@@ -201,7 +233,8 @@ def get_type_correlation():
 
 if __name__ == "__main__":
     #get_type_correlation()
-    eval_djalil_no_spec()
+    eval_djalil_centrality_direct()
+    #eval_djalil_no_spec_import()
     #evaluate_all_methods()
     #ow = OptimizeWeights()
     #print(ow.find_best_weights())

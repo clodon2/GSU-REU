@@ -343,3 +343,34 @@ class CompareDataNoSpecialty:
                 self.append_results(save_file_name, save_info)
             else:
                 self.save_results(save_file_name, save_info)
+
+    def extract_ranking(self, file:str):
+        """
+        get ranking from unfiltered ranking file
+        :param file: unfiltered rank file name
+        :return: dict of specialty : scores
+        """
+        with open(file, "r") as extract_file:
+            extract = csv.reader(extract_file)
+            extracted_list = []
+            for row in extract:
+                print(row)
+                npi = int(row[0].strip())
+                score = float(row[1].strip())
+                extracted_list.append((npi, score))
+
+        return extracted_list
+
+def add_specialties(ranking:list, graph:Graph):
+    specialty_ranking = {}
+    for entry in ranking:
+        print(entry)
+        npi = entry[0]
+        score = entry[1]
+        for specialty in graph.nodes[npi]["specialties"]:
+            if specialty in specialty_ranking:
+                specialty_ranking[specialty].append(entry)
+            else:
+                specialty_ranking[specialty] = [entry]
+
+    return specialty_ranking

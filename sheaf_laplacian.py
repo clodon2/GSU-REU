@@ -246,9 +246,10 @@ class SheafLaplacian:
         for i in range(0, len(tasks), batch_size):
             print("batch", i)
             batch = tasks[i:i + batch_size]
+            print("b")
 
-            with Pool(processes=num_workers, initializer=init_worker, initargs=(self.coboundary_map,)) as pool:
-                results = pool.imap(compute_component_centrality, batch, chunksize=500)
+            with Pool(processes=num_workers, initializer=init_worker, initargs=(self.coboundary_map.copy(),)) as pool:
+                results = pool.imap(compute_component_centrality, batch, chunksize=250)
 
             for specialty, (node, score) in results:
                 if specialty not in specialty_to_centrality:
@@ -282,7 +283,7 @@ class SheafLaplacian:
         print("computing all for ranking...")
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centralities_multiprocessing()
+        self.compute_centralities_multiprocessing_faster()
         ranking = self.get_ranking()
 
         return ranking
@@ -308,6 +309,7 @@ class SheafLaplacian:
 
 _global_coboundary_csr = None
 def init_worker(coboundary_csr):
+    print("init")
     global _global_coboundary_csr
     _global_coboundary_csr = coboundary_csr
     
@@ -315,12 +317,18 @@ def compute_component_centrality(task):
     node, global_col, specialty, all_cols, E = task
     print(node, "running")
     delta = _global_coboundary_csr
+    print("global co")
     try:
-        keep_cols = np.setdiff1d(all_cols, [global_col])
+        print("trimming")
+        print(global_col, all_cols)
+        keep_cols = all_cols[all_cols != global_col]
+        print("keeped")
         new_delta = delta[:, keep_cols]
+        print("trimmed")
         new_L = new_delta.transpose().dot(new_delta)
         new_E = np.sum(new_L.data ** 2)
         centrality_value = (E - new_E) / E
         return (specialty, (node, centrality_value))
     except Exception as e:
+        print("excep")
         return (specialty, (node, 0.0))

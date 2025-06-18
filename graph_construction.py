@@ -87,6 +87,9 @@ class GraphBuilder:
         for node in self.graph.nodes:
             try:
                 spec = self.graph.nodes[node]["specialties"]
+                prim = self.graph.nodes[node]["primary"]
+                if not prim or not spec:
+                    remove_nodes.append(node)
             except:
                 remove_nodes.append(node)
                 print(f"no specialties for node {node}")
@@ -224,8 +227,16 @@ class GraphBuilder:
                 pi = line[8].strip()
                 ia = line[9].strip()
                 cost = line[10].strip()
+                final = line[12].strip()
+                scores = [quality, pi, ia, cost, final]
+                converted = []
+                for score in scores:
+                    new_score = 0
+                    if score:
+                        new_score = float(score)
+                    converted.append(new_score)
                 # provider for new dataset: 5 old: 0
-                if quality and pi and ia and cost:
+                if scores[0] and scores[1] and scores[2] and scores[3] and scores[4]:
                     valid_providers.add(provider)
 
         print(len(valid_providers))

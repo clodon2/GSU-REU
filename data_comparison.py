@@ -506,10 +506,10 @@ class CompareData:
         return extracted_dict
 
     def get_top_spec_names(self, n):
-        # only get results for top 5 specialties
+        # only get results for top n specialties
         specialty_scores = []
         for specialty in self.provider_specialty_ranking:
-            if (len(self.provider_specialty_ranking[specialty]) > n):
+            if (len(self.provider_specialty_ranking[specialty]) > 2*n):
                 specialty_scores.append((specialty, len(self.provider_specialty_ranking[specialty])))
 
         specialty_scores = sorted(specialty_scores, key=lambda item: item[1], reverse=True)

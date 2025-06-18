@@ -298,7 +298,7 @@ class CompareData:
 
         return grouped_rankings
 
-    def trim_rankings(self, computed_ranking:dict, n):
+    def trim_rankings(self, computed_ranking:dict, n, top_spec_num=5):
         """
         trim rankings to top n specialties
         :param computed_ranking: ranking computed
@@ -310,12 +310,12 @@ class CompareData:
         # only get results for top 5 specialties
         specialty_scores = []
         for specialty in self.provider_specialty_ranking:
-            if (specialty in computed_ranking and len(self.provider_specialty_ranking[specialty]) > n and
-                    len(computed_ranking[specialty]) > n):
+            if (specialty in computed_ranking and len(self.provider_specialty_ranking[specialty]) > 2*n and
+                    len(computed_ranking[specialty]) > 2*n):
                 specialty_scores.append((specialty, len(self.provider_specialty_ranking[specialty])))
 
         specialty_scores = sorted(specialty_scores, key=lambda item: item[1], reverse=True)
-        specialty_scores = specialty_scores
+        specialty_scores = specialty_scores[:top_spec_num]
         top_specialties_names = [specialty_info[0] for specialty_info in specialty_scores]
 
         for specialty in top_specialties_names:
@@ -384,7 +384,7 @@ class CompareData:
                 for key in computed_ranking:
                     write.writerow([key, computed_ranking[key]])
 
-        trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, top_specialties)
+        trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, hits_n, top_specialties)
         """
         if title == "Closness":
             for specialty in trimmed_rankings_by_specialty:
@@ -505,7 +505,7 @@ class CompareData:
 
         return extracted_dict
 
-    def get_top_spec_names(self, n):
+    def get_top_spec_names(self, n, top_spec_num=100):
         # only get results for top n specialties
         specialty_scores = []
         for specialty in self.provider_specialty_ranking:
@@ -513,6 +513,6 @@ class CompareData:
                 specialty_scores.append((specialty, len(self.provider_specialty_ranking[specialty])))
 
         specialty_scores = sorted(specialty_scores, key=lambda item: item[1], reverse=True)
-        specialty_scores = specialty_scores
+        specialty_scores = specialty_scores[:top_spec_num]
         top_specialties_names = [specialty_info[0] for specialty_info in specialty_scores]
         return top_specialties_names

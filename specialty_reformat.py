@@ -11,13 +11,15 @@ def create_new_specialty_csv(input_filename="specialty_data.csv",
     lines_read = 0
     taxonomy_columns = []
     switch_columns = []
-    with open(input_filename, "r") as data, open(output_filename, "w", newline='') as reformatted:
+    with (open(input_filename, "r", encoding="utf-8") as data,
+          open(output_filename, "w", newline='', encoding="utf-8") as reformatted):
         csv_reader = csv.reader(data)
         csv_writer = csv.writer(reformatted)
         for line in csv_reader:
             # line format:
             # provider, specialties
             lines_read += 1
+            print(lines_read)
             # extract data
             # this will probably have to be changed
             if lines_read == 1:
@@ -97,6 +99,6 @@ def add_key_value_to_json(key, value):
 
 
 if __name__ == "__main__":
-    create_new_specialty_csv(input_filename="specialty_2015.csv",
-                             output_filename="specialty_2015_reformatted.csv")
+    create_new_specialty_csv(input_filename="./datasets/specialty_2018.csv",
+                             output_filename="./datasets/ specialty_2018_reformatted.csv")
     #create_new_specialty_json()

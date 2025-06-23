@@ -244,8 +244,11 @@ class EvaluationMethods:
         """
         ranking = {}
         for specialty in specialties:
-            centralities = self.laplacian_centrality_multiprocessing(self.subgraph_given_specialty(specialty))
-            ranking[specialty] = list(centralities.items())
+            try:
+                centralities = self.laplacian_centrality_multiprocessing(self.subgraph_given_specialty(specialty))
+                ranking[specialty] = list(centralities.items())
+            except:
+                pass
 
         return ranking
 

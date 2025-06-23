@@ -45,7 +45,7 @@ class SheafLaplacian:
                 same_day_total = self.restriction_weights[2] * (edge_same_days / self.graph.nodes[provider]["same_total"])
                 restriction = np.array([pair_percentage, bene_total, same_day_total])
 
-                # check primery weight is correct
+                # check primary weight is correct
                 """
                 if self.graph.nodes[provider]["primary"]:
                     specialty_primary_index = self.graph.nodes[provider]["specialties"].index(self.graph.nodes[provider]["primary"])
@@ -283,7 +283,7 @@ class SheafLaplacian:
         print("computing all for ranking...")
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centralities_multiprocessing_faster()
+        self.compute_centralities_multiprocessing()
         ranking = self.get_ranking()
 
         return ranking

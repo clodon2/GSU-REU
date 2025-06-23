@@ -8,9 +8,9 @@ from matplotlib import colormaps
 
 class GraphBuilder:
     def __init__(self, primary_specialty_weight:float=2,
-                 provider_data_file:str="pa_data.txt",
-                 specialty_data_file:str="specialty_2015_reformatted.csv",
-                 graph_data_file:str="physician_graph.gexf"):
+                 provider_data_file:str="./datasets/pa_data.txt",
+                 specialty_data_file:str="./datasets/specialty_2015_reformatted.csv",
+                 graph_data_file:str="./datasets/physician_graph.gexf"):
         """
         create provider graph manager
         :param primary_specialty_weight: the weight given to a provider's main specialty
@@ -202,7 +202,7 @@ class GraphBuilder:
             rank_file = csv.reader(rank_file)
             next(rank_file)
             for line in rank_file:
-                provider = int(line[5].strip())
+                provider = int(line[0].strip())
                 valid_providers.add(provider)
 
         unscored_nodes = [node for node in self.graph.nodes if node not in valid_providers]
@@ -210,25 +210,37 @@ class GraphBuilder:
 
         self.graph.remove_nodes_from(unscored_nodes)
 
-    def remove_unscored_nodes_new(self, score_file_name):
+    def remove_unscored_nodes_new(self, score_file_name,
+                                  score_specialty_file="./datasets/specialty_2018_reformatted.csv"):
         """
         removes nodes that do not have a score in the scoring dataset from the graph
         :param score_file_name: the score dataset filename
         :return:
         """
         print("removing unscored nodes...")
+        specialty_info = {}
+        with open(score_specialty_file, "r") as spec_file:
+            spec_file = csv.reader(spec_file)
+            next(spec_file)
+            for line in spec_file:
+                npi = int(line[0].strip())
+                primary = line[-1].strip()
+                specialty_info[npi] = primary
+
         valid_providers = set()
         with open(score_file_name, "r") as rank_file:
             rank_file = csv.reader(rank_file)
             next(rank_file)
             for line in rank_file:
-                provider = int(line[0].strip())
-                primary_spec = line[1].strip()
-                quality = line[3].strip()
-                pi = line[4].strip()
-                ia = line[5].strip()
-                cost = line[6].strip()
-                final = line[8].strip()
+                provider = int(line[5].strip())
+                # quality=24, pi=47, ia=75, cost=85, mip=20
+                # 3, 4, 5, 6, 8 old
+                primary_spec = specialty_info[npi]
+                quality = line[24].strip()
+                pi = line[47].strip()
+                ia = line[75].strip()
+                cost = line[85].strip()
+                final = line[20].strip()
                 scores = [quality, pi, ia, cost, final]
                 converted = []
                 for score in scores:
@@ -275,17 +287,18 @@ class GraphBuilder:
             next(actual_specialty_info)
             for row in actual_specialty_info:
                 npi = int(row[0].strip())
-                specialties = row[2].strip().split(",")
-                clean_specialties = []
-                for specialty in specialties:
-                    clean_specialties.append(specialty[:10])
-                specialty_dict[npi] = clean_specialties
+                specialty_dict[npi] = []
+                for sc in row[1:-1]:
+                    if sc:
+                        specialty_dict[npi].append(sc)
+
+                specialty_dict[npi].append(row[-1])
 
         remove_nodes = []
         for npi in self.graph.nodes:
             if npi in specialty_dict:
-                overlapping_specialties = set(specialty_dict[npi]) | set(self.graph.nodes[npi]["specialties"])
-                if not overlapping_specialties:
+                overlapping_specialties = set(specialty_dict[npi][:-1]) | set(self.graph.nodes[npi]["specialties"])
+                if not overlapping_specialties or specialty_dict[npi][-1] != self.graph.nodes[npi]["primary"]:
                     remove_nodes.append(npi)
                 else:
                     self.graph.nodes[npi]["specialties"] = overlapping_specialties

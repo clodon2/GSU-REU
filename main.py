@@ -11,49 +11,41 @@ from dataset_analysis import get_score_correlation
 
 def eval_sheaf_lap():
     graph_builder = GraphBuilder(primary_specialty_weight=2)
-    graph = graph_builder.build_graph(rows=1000)
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv")
     sheaf_laplacian = SheafLaplacian(graph,
                                      graph_builder.coboundary_columns,
                                      restriction_weights=[1, 1, 1],
                                      primary_specialty_weight=2)
     eval_compare = CompareData()
-    eval_compare.setup_evaluate(graph)
+    eval_compare.setup_evaluate()
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings()
     eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
                                        save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
                                        save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
                                        save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
                                        save_type="append", hits_n=40, ndcg_n=40)
-
-    sheaf_laplacian.restriction_weights = [1, .1, .05]
-    sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings()
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianC", save_unfiltered=True,
-                                       save_type="write", hits_n=10, ndcg_n=10)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianC", save_unfiltered=True,
-                                       save_type="append", hits_n=20, ndcg_n=20)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianC", save_unfiltered=True,
-                                       save_type="append", hits_n=30, ndcg_n=30)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianC", save_unfiltered=True,
-                                       save_type="append", hits_n=40, ndcg_n=40)
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
+                                       save_type="append", hits_n=50, ndcg_n=50)
 
 
 def evaluate_all_methods():
     graph_builder = GraphBuilder()
-    graph = graph_builder.build_graph(remove_unscored_nodes_file="pa_scores.csv")
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores.csv")
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
-                                     restriction_weights=[.36131, 1.1985, 1.888], primary_specialty_weight=1.0434)
+                                     restriction_weights=[1, 1, 1], primary_specialty_weight=2)
+    # .36131, 1.1985, 1.888
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings()
     # replace this with some other specialty name list
 
     eval_compare = CompareData()
-    eval_compare.setup_evaluate(graph)
+    eval_compare.setup_evaluate()
 
-    specialty_names = eval_compare.get_top_spec_names(5)
+    specialty_names = eval_compare.get_top_spec_names(n=100, top_spec_num=25)
 
     ev = EvaluationMethods(graph)
 
@@ -153,7 +145,7 @@ def eval_djalil_normal():
     rankings = load_djalil_stuff()
     eval_compare = CompareData()
     eval_compare.provider_specialty_ranking = import_djalil_ground_truth()
-    specialty_num = 100
+    specialty_num = 25
     eval_compare.evaluate_all_and_save(rankings, title="djalilSheaf", save_unfiltered=True,
                                        ndcg_n=10, hits_n=10, save_type="write", top_specialties=specialty_num)
     eval_compare.evaluate_all_and_save(rankings, title="djalilSheaf", save_unfiltered=False,
@@ -169,7 +161,7 @@ def eval_djalil_centrality_direct():
     rankings = import_djalil_sheaf_laplacian_centrality()
     eval_compare = CompareData()
     eval_compare.provider_specialty_ranking = import_djalil_ground_truth()
-    specialty_num = 100
+    specialty_num = 25
     eval_compare.evaluate_all_and_save(rankings, title="djalilNew", save_unfiltered=True,
                                        ndcg_n=10, hits_n=10, save_type="write", top_specialties=specialty_num)
     eval_compare.evaluate_all_and_save(rankings, title="djalilNew", save_unfiltered=False,
@@ -227,13 +219,13 @@ def get_real_ranking_all_spec_removal():
 
 def get_type_correlation():
     gb = GraphBuilder()
-    graph = gb.build_graph(remove_unscored_nodes_file="pa_scores.csv")
+    graph = gb.build_graph(remove_unscored_nodes_file="./datasets/pa_scores.csv")
     gb.get_graph_stats()
     get_score_correlation(graph, "pa_scores.csv")
 
 def build_graph_test():
     gb = GraphBuilder()
-    graph = gb.build_graph(remove_unscored_nodes_file="pa_scores_new.csv")
+    graph = gb.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_new.csv")
     gb.get_graph_stats()
     coboundary_map, dgraph = get_djalil_coboundary()
     diff_nodes = []
@@ -247,7 +239,7 @@ def build_graph_test():
 
 
 if __name__ == "__main__":
-    get_real_ranking_all_spec_removal()
+    eval_sheaf_lap()
     #get_type_correlation()
     #eval_djalil_centrality_direct()
     #eval_djalil_no_spec_import()

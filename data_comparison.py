@@ -6,9 +6,9 @@ from random import shuffle
 from math import log2
 
 class CompareData:
-    def __init__(self, provider_ranking_file:str="pa_scores.csv",
-                 taxonomy_info_file:str="taxonomy_info.csv",
-                 specialty_info_file:str="pa_scores_new.csv"):
+    def __init__(self, provider_ranking_file:str="./datasets/pa_scores_2017.csv",
+                 taxonomy_info_file:str="./datasets/taxonomy_info.csv",
+                 specialty_info_file:str="./datasets/specialty_2018_reformatted.csv"):
         """
         object used to compare computed rankings to the ground truth
         :param provider_ranking_file: filename of ground truth dataset
@@ -31,12 +31,12 @@ class CompareData:
             next(rank_file)
             providers = {}
             for line in rank_file:
-                provider = line[0].strip()
-                # quality=7, pi=8, ia=9, cost=10, mip=11, mip_plus_bonus=12
-                if (line[12].strip() == ''):
+                provider = line[5].strip()
+                # quality=24, pi=47, ia=75, cost=85, mip=20
+                if (line[20].strip() == ''):
                     continue
                 else:
-                    score = float(line[12].strip())
+                    score = float(line[20].strip())
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))
@@ -67,15 +67,12 @@ class CompareData:
             spec_info = csv.reader(specialty_info)
             next(spec_info)
             for row in spec_info:
+                print(row)
                 npi = int(row[0].strip())
-                specialties = row[2]
-                if specialties:
-                    specialties = row[2].strip().split(",")
-                    cleaned_specialties = []
-                    for specialty in specialties:
-                        cleaned_specialties.append(specialty[:10])
-
-                    specialty_dict[npi] = cleaned_specialties
+                specialty_dict[npi] = []
+                for sc in row[1:-1]:
+                    if sc:
+                        specialty_dict[npi].append(sc)
 
         for entry in self.provider_ranking:
             npi = int(entry[0])

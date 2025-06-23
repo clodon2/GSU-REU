@@ -99,7 +99,8 @@ class GraphBuilder:
 
         print(f"{len(remove_nodes)} no specialty nodes removed")
 
-    def build_graph(self, rows=999999999999999999, remove_unscored_nodes_file=''):
+    def build_graph(self, rows=999999999999999999, remove_unscored_nodes_file='',
+                    remove_non_overlap_spec_file=''):
         """
         create graph structure for providers and add specialties
         :return: the graph
@@ -110,6 +111,8 @@ class GraphBuilder:
         if remove_unscored_nodes_file:
             self.remove_unscored_nodes_new(remove_unscored_nodes_file)
         self.add_specialties_fast()
+        if remove_non_overlap_spec_file:
+            self.remove_non_overlap_specialties(remove_non_overlap_spec_file)
         self.remove_other_connections()
         self.sheaf_specialty_conversion()
         self.add_provider_totals()

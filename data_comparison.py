@@ -1,6 +1,8 @@
 import csv
 
 from scipy.stats import spearmanr
+# need for extract
+import numpy as np
 from networkx import Graph
 from random import shuffle
 from math import log2
@@ -67,7 +69,6 @@ class CompareData:
             spec_info = csv.reader(specialty_info)
             next(spec_info)
             for row in spec_info:
-                print(row)
                 npi = int(row[0].strip())
                 specialty_dict[npi] = []
                 for sc in row[1:-1]:
@@ -497,6 +498,8 @@ class CompareData:
         :param file: unfiltered rank file name
         :return: dict of specialty : scores
         """
+        # bad storage method so need to change max field length
+        csv.field_size_limit((2**31 - 1))
         with open(file, "r") as extract_file:
             extract = csv.reader(extract_file)
             header = next(extract)

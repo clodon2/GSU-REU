@@ -122,9 +122,8 @@ class SheafLaplacian:
         sheaf_laplacian_energy = np.sum(self.sheaf_laplacian.data ** 2)
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
         # convert coboundary map for column removal later
-        self.coboundary_map = self.coboundary_map.tocsr()
+        self.coboundary_map = self.coboundary_map.tocsc()
         all_columns = np.arange(self.coboundary_map.shape[1])
-        pool_args = []
         print("generating pool args")
 
         # divide up total work into groups to avoid pickling errors with large node number
@@ -135,8 +134,7 @@ class SheafLaplacian:
         # process groups, centralities
         results = []
         for group in groups:
-            for i, node in enumerate(group):
-                pool_args.append((sheaf_laplacian_energy, node, all_columns))
+            pool_args = [(sheaf_laplacian_energy, node, all_columns) for node in group]
             print("computing sheaf laplacian centralities")
             start = time.time()
             with Pool(processes=10) as pool:

@@ -305,6 +305,9 @@ class GraphBuilder:
             else:
                 remove_nodes.append(npi)
 
+        self.graph.remove_nodes_from(remove_nodes)
+        print(f"removed spec different {len(remove_nodes)} from graph")
+
 
     def draw_graph(self, edge_colors: bool = True, edge_labels: bool = True):
         """

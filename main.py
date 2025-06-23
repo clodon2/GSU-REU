@@ -221,7 +221,7 @@ def get_type_correlation():
     gb = GraphBuilder()
     graph = gb.build_graph(remove_unscored_nodes_file="./datasets/pa_scores.csv")
     gb.get_graph_stats()
-    get_score_correlation(graph, "pa_scores.csv")
+    get_score_correlation(graph, "./datasets/pa_scores.csv")
 
 def build_graph_test():
     gb = GraphBuilder()

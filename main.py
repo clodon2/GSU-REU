@@ -26,8 +26,8 @@ def eval_sheaf_lap():
                                       remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
     sheaf_laplacian = SheafLaplacian(graph,
                                      graph_builder.coboundary_columns,
-                                     restriction_weights=[1, 1, 1],
-                                     primary_specialty_weight=2)
+                                     restriction_weights=[.00393, .00325, .01377],
+                                     primary_specialty_weight=.125)
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
     top_specs = eval_compare.get_top_spec_names(100, 10)
@@ -170,15 +170,16 @@ class OptimizeWeights:
                                               primary_specialty_weight=2)
         self.eval_compare = CompareData()
         self.eval_compare.setup_evaluate(score_index=20)
+        self.top_scores = self.eval_compare.get_top_spec_names(100, 10)
 
     def get_weight_score(self, weights):
         self.sheaf_laplacian.primary_specialty_weight = weights[:1]
         self.sheaf_laplacian.restriction_weights = weights[1:]
-        sheaf_laplacian_rankings = self.sheaf_laplacian.compute_all_give_rankings()
+        sheaf_laplacian_rankings = self.sheaf_laplacian.compute_all_give_rankings(only_top_specialties=self.top_scores)
         return self.eval_compare.get_mean_score(sheaf_laplacian_rankings, top_specialties=10)
 
     def find_best_weights(self):
-        DE = DifferentialEvolution(population_size=8, problem_dimensions=4, iterations=20, scaling_factor=.5,
+        DE = DifferentialEvolution(population_size=4, problem_dimensions=4, iterations=6, scaling_factor=.5,
                                    crossover_chance=.7, search_space=[-2, 2], fitness_function=self.get_weight_score)
         return DE.run()
 
@@ -307,9 +308,10 @@ def get_real_ranking_all_spec_removal():
 
 def get_type_correlation():
     gb = GraphBuilder()
-    graph = gb.build_graph(remove_unscored_nodes_file="./datasets/pa_scores.csv")
+    graph = gb.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv",
+                           remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
     gb.get_graph_stats()
-    get_score_correlation(graph, "./datasets/pa_scores.csv")
+    get_score_correlation(graph, "./datasets/pa_scores_2017.csv")
 
 def build_graph_test():
     gb = GraphBuilder()
@@ -327,12 +329,12 @@ def build_graph_test():
 
 
 if __name__ == "__main__":
-    eval_sheaf_lap()
+    #eval_sheaf_lap()
     #evaluate_all_methods_all_scores()
     #get_type_correlation()
     #eval_djalil_centrality_direct()
     #eval_djalil_no_spec_import()
     #evaluate_all_methods()
-    #ow = OptimizeWeights()
-    #print(ow.find_best_weights())
+    ow = OptimizeWeights()
+    print(ow.find_best_weights())
     # suggested weights at 1000: (0.5440900111139723, array([0.69067041, 0.59055783, 0.        ]))

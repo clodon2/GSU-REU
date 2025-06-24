@@ -169,7 +169,8 @@ class SheafLaplacian:
     def compute_centralities_multiprocessing(self, only_top_specialties:list=[]):
         """
         calculate the centralities for every specialty of every node by removing the column of the specialty
-        :return:
+        :param only_top_specialties: list of specialties to get node centralities for
+        :return: dict of specialty:ranking list of tuples (node, centrality)
         """
         print("computing sheaf laplacian energy...")
         start = time.time()
@@ -218,7 +219,8 @@ class SheafLaplacian:
                         pool_args.append((sheaf_laplacian_energy, all_columns, (node, node_index, specialty)))
             print(f"processing group {g+1} of {len(groups)} with {len(pool_args)} specialties of nodes")
             with Pool(processes=15, initializer=init_worker, initargs=(shared_data_for_pool, )) as pool:
-                results_iter = (pool.imap_unordered(compute_centralities_multiprocessing_helper, pool_args, chunksize=30))
+                # use imap to give iterable to track results with tqdm
+                results_iter = (pool.imap_unordered(compute_centralities_multiprocessing_helper, pool_args, chunksize=5))
                 for result in tqdm(results_iter, total=len(pool_args), file=sys.stdout):
                     results.append(result)
 

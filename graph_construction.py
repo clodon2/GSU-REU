@@ -92,7 +92,6 @@ class GraphBuilder:
                     remove_nodes.append(node)
             except:
                 remove_nodes.append(node)
-                print(f"no specialties for node {node}")
 
         for node in remove_nodes:
             self.graph.remove_node(node)
@@ -117,7 +116,7 @@ class GraphBuilder:
         self.sheaf_specialty_conversion()
         self.add_provider_totals()
         end = time.time()
-        print(f"graph built in {end - start}")
+        print(f"graph built in {end - start} with {self.graph.number_of_nodes()} nodes and {self.graph.number_of_edges()} edges")
         return self.graph
 
     def get_graph_stats(self):

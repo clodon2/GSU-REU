@@ -2,8 +2,91 @@ import networkx as nx
 import numpy as np
 import scipy as sp
 import time
-from multiprocessing import Pool
+from multiprocessing import Pool, shared_memory
 from math import ceil
+
+
+_shared_coboundary = None
+def init_worker(shared_data):
+    global _shared_coboundary
+    _shared_coboundary = {
+        "data": shared_memory.SharedMemory(name=shared_data["data_name"]),
+        "indices": shared_memory.SharedMemory(name=shared_data["indices_name"]),
+        "indptr": shared_memory.SharedMemory(name=shared_data["indptr_name"]),
+        "shape": shared_data["shape"],
+        "dtype": shared_data["dtype"],
+        "data_shape": shared_data["data_shape"],
+        "indices_shape": shared_data["indices_shape"],
+        "indptr_shape": shared_data["indptr_shape"]
+    }
+
+def create_shared_csc(matrix: sp.sparse.csc_matrix):
+    """convert csc matrix to shared memory for less ram usage and quicker lookup"""
+    shm_data = shared_memory.SharedMemory(create=True, size=matrix.data.nbytes)
+    shm_indices = shared_memory.SharedMemory(create=True, size=matrix.indices.nbytes)
+    shm_indptr = shared_memory.SharedMemory(create=True, size=matrix.indptr.nbytes)
+
+    # copy data
+    np.frombuffer(shm_data.buf, dtype=matrix.data.dtype)[:] = matrix.data
+    np.frombuffer(shm_indices.buf, dtype=matrix.indices.dtype)[:] = matrix.indices
+    np.frombuffer(shm_indptr.buf, dtype=matrix.indptr.dtype)[:] = matrix.indptr
+
+    return {
+        "data": shm_data,
+        "indices": shm_indices,
+        "indptr": shm_indptr,
+        "shape": matrix.shape,
+        "dtype": matrix.data.dtype,
+        "data_shape": matrix.data.shape,
+        "indices_shape": matrix.indices.shape,
+        "indptr_shape": matrix.indptr.shape
+    }
+
+def load_shared_csc(meta):
+    """reconstruct csc from shared"""
+    data = np.ndarray(
+        shape=meta["data_shape"],
+        dtype=meta["dtype"],
+        buffer=meta["data"].buf
+    )
+    indices = np.ndarray(
+        shape=meta["indices_shape"],
+        dtype=np.int32,
+        buffer=meta["indices"].buf
+    )
+    indptr = np.ndarray(
+        shape=meta["indptr_shape"],
+        dtype=np.int32,
+        buffer=meta["indptr"].buf
+    )
+    return sp.sparse.csc_matrix((data, indices, indptr), shape=meta["shape"])
+
+def compute_centralities_multiprocessing_helper(sheaf_laplacian_energy, all_columns, node_data):
+    """
+    each worker performs this function, finds all specialty centralities for a single node
+    :param sheaf_laplacian_energy: energy of the sheaf laplacian without removing anything
+    :param node: node to get specialty energies for
+    :param i: node number, not needed
+    :return: node id, centralities in order same as node specialties
+    """
+    # should be csc
+    global _shared_coboundary
+    coboundary_map = load_shared_csc(_shared_coboundary)
+    node, indices = node_data
+    node_centralities = []
+    # for each specialty, get the centrality score
+    for specialty_index in indices:
+        include_cols = np.setdiff1d(all_columns, [specialty_index])
+        sub_coboundary = coboundary_map[:, include_cols]
+
+        # sheaf laplacian of coboundary w/ removed
+        sheaf_laplacian = sub_coboundary.transpose().dot(sub_coboundary)
+        spec_energy = np.sum(sheaf_laplacian.data ** 2)
+        # centrality (impact) for each specialty of each node
+        centrality = (sheaf_laplacian_energy - spec_energy) / sheaf_laplacian_energy
+        node_centralities.append(centrality)
+
+    return node, node_centralities
 
 
 class SheafLaplacian:
@@ -40,20 +123,18 @@ class SheafLaplacian:
             # edge_restrictions = []
             for provider in edge:
                 # get restriction maps based on provider edge percentages
-                pair_percentage = self.restriction_weights[0] * (edge_pairs / self.graph.nodes[provider]["pair_total"])
-                bene_total = self.restriction_weights[1] * (edge_benes / self.graph.nodes[provider]["beneficiary_total"])
-                same_day_total = self.restriction_weights[2] * (edge_same_days / self.graph.nodes[provider]["same_total"])
+                pair_percentage = self.restriction_weights[0] * (edge_pairs)
+                bene_total = self.restriction_weights[1] * (edge_benes)
+                same_day_total = self.restriction_weights[2] * (edge_same_days)
                 restriction = np.array([pair_percentage, bene_total, same_day_total])
 
                 # check primary weight is correct
-                """
                 if self.graph.nodes[provider]["primary"]:
                     specialty_primary_index = self.graph.nodes[provider]["specialties"].index(self.graph.nodes[provider]["primary"])
                     if self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] != self.primary_specialty_weight:
                         self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] = self.primary_specialty_weight
-                """
                 # add info to array for sparse matrix conversion
-                nonzero_restrictions.extend((self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction)).tolist())
+                nonzero_restrictions.extend((self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction) / 20).tolist())
                 nzr_column_indices.extend(self.graph.nodes[provider]["indices"])
                 for input_num in range(len(self.graph.nodes[provider]["indices"])):
                     nzr_row_indices.append(i)
@@ -86,32 +167,6 @@ class SheafLaplacian:
 
         return sheaf_lap
 
-    def compute_centralities_multiprocessing_helper(self, sheaf_laplacian_energy, node, all_col):
-        """
-        each worker performs this function, finds all specialty centralities for a single node
-        :param sheaf_laplacian_energy: energy of the sheaf laplacian without removing anything
-        :param node: node to get specialty energies for
-        :param i: node number, not needed
-        :return: node id, centralities in order same as node specialties
-        """
-        # should be csr
-        coboundary_csr = self.coboundary_map
-        node_centralities = []
-        indices = self.graph.nodes[node]["indices"]
-        # for each specialty, get the centrality score
-        for specialty_index in indices:
-            include_cols = np.setdiff1d(all_col, [specialty_index])
-            sub_coboundary = coboundary_csr[:, include_cols]
-
-            # sheaf laplacian of coboundary w/ removed
-            sheaf_laplacian = sub_coboundary.transpose().dot(sub_coboundary)
-            spec_energy = np.sum(sheaf_laplacian.data ** 2)
-            # centrality (impact) for each specialty of each node
-            centrality = (sheaf_laplacian_energy - spec_energy) / sheaf_laplacian_energy
-            node_centralities.append(centrality)
-
-        return node, node_centralities
-
     def compute_centralities_multiprocessing(self):
         """
         calculate the centralities for every specialty of every node by removing the column of the specialty
@@ -119,6 +174,7 @@ class SheafLaplacian:
         """
         print("computing sheaf laplacian energy...")
         start = time.time()
+        self.rankings = {}
         sheaf_laplacian_energy = np.sum(self.sheaf_laplacian.data ** 2)
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
         # convert coboundary map for column removal later
@@ -126,21 +182,46 @@ class SheafLaplacian:
         all_columns = np.arange(self.coboundary_map.shape[1])
         print("generating pool args")
 
+        print("setting up shared memory...")
+        shared = create_shared_csc(self.coboundary_map)
+
+        # Pass only memory names to pool
+        shared_data_for_pool = {
+            "data_name": shared["data"].name,
+            "indices_name": shared["indices"].name,
+            "indptr_name": shared["indptr"].name,
+            "shape": shared["shape"],
+            "dtype": str(shared["dtype"]),
+            "data_shape": shared["data_shape"],
+            "indices_shape": shared["indices_shape"],
+            "indptr_shape": shared["indptr_shape"]
+        }
+
         # divide up total work into groups to avoid pickling errors with large node number
-        group_size = 50_000
+        group_size = 100_000
         divisions = ceil(len(self.graph.nodes) / group_size)
         groups = [list(self.graph.nodes)[i * group_size:(i + 1) * group_size] for i in range(divisions)]
 
+        print(f"setup finished in {time.time() - start}")
         # process groups, centralities
+        print("computing sheaf laplacian centralities")
         results = []
-        for group in groups:
-            pool_args = [(sheaf_laplacian_energy, node, all_columns) for node in group]
-            print("computing sheaf laplacian centralities")
-            start = time.time()
-            with Pool(processes=10) as pool:
-                results.extend(pool.starmap(self.compute_centralities_multiprocessing_helper, pool_args, chunksize=500))
+        start = time.time()
+        for g, group in enumerate(groups):
+            pool_args = [(sheaf_laplacian_energy, all_columns, (node, self.graph.nodes[node]["indices"])) for node in group]
+            print(f"processing group {g+1} of {len(groups)} with {len(pool_args)} nodes")
+            with Pool(processes=10, initializer=init_worker, initargs=(shared_data_for_pool, )) as pool:
+                results.extend(pool.starmap(compute_centralities_multiprocessing_helper,
+                                            pool_args, chunksize=500))
 
-        print(f"found in {time.time() - start}")
+        print("cleaning shared memory...")
+        shared["data"].close()
+        shared["data"].unlink()
+        shared["indices"].close()
+        shared["indices"].unlink()
+        shared["indptr"].close()
+        shared["indptr"].unlink()
+
         # add results to ranking dict
         for entry in results:
             node = entry[0]
@@ -220,47 +301,6 @@ class SheafLaplacian:
         print(f"energies found in {end - start}")
         return results
 
-    def compute_centralities_multiprocessing_faster(self, batch_size=10000):
-        """Parallel computation of centrality per specialty component."""
-        m, n = self.coboundary_map.shape
-        all_cols = np.arange(n)
-        E = np.sum(self.sheaf_laplacian.data ** 2)
-
-        # Step 1: Build tasks
-        tasks = []
-        for node in self.graph.nodes():
-            cols_for_node = self.graph.nodes[node]["indices"]
-            specialties = self.graph.nodes[node]["specialties"]
-            for local_idx, global_col in enumerate(cols_for_node):
-                specialty = specialties[local_idx]
-                tasks.append((node, global_col, specialty, all_cols, E))
-
-        print(f"Total component tasks: {len(tasks)}")
-
-        # Step 2: Parallel process
-        specialty_to_centrality = {}
-        num_workers = 4
-
-        for i in range(0, len(tasks), batch_size):
-            print("batch", i)
-            batch = tasks[i:i + batch_size]
-            print("b")
-
-            with Pool(processes=num_workers, initializer=init_worker, initargs=(self.coboundary_map.copy(),)) as pool:
-                results = pool.imap(compute_component_centrality, batch, chunksize=250)
-
-            for specialty, (node, score) in results:
-                if specialty not in specialty_to_centrality:
-                    specialty_to_centrality[specialty] = []
-                specialty_to_centrality[specialty].append((node, score))
-
-        # Step 3: Sort by descending centrality
-        for specialty in specialty_to_centrality:
-            specialty_to_centrality[specialty].sort(key=lambda x: x[1], reverse=True)
-
-        self.rankings = specialty_to_centrality
-        return self.rankings
-
     def get_ranking(self):
         """
         get rankings of providers based on specialties
@@ -303,30 +343,3 @@ class SheafLaplacian:
         print(self.coboundary_map)
 
         self.compute_sheaf_laplacian()
-
-
-_global_coboundary_csr = None
-def init_worker(coboundary_csr):
-    print("init")
-    global _global_coboundary_csr
-    _global_coboundary_csr = coboundary_csr
-    
-def compute_component_centrality(task):
-    node, global_col, specialty, all_cols, E = task
-    print(node, "running")
-    delta = _global_coboundary_csr
-    print("global co")
-    try:
-        print("trimming")
-        print(global_col, all_cols)
-        keep_cols = all_cols[all_cols != global_col]
-        print("keeped")
-        new_delta = delta[:, keep_cols]
-        print("trimmed")
-        new_L = new_delta.transpose().dot(new_delta)
-        new_E = np.sum(new_L.data ** 2)
-        centrality_value = (E - new_E) / E
-        return (specialty, (node, centrality_value))
-    except Exception as e:
-        print("excep")
-        return (specialty, (node, 0.0))

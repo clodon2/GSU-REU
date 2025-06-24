@@ -23,7 +23,7 @@ class CompareData:
         self.provider_specialty_ranking = {}
         self.taxonomy_info = {}
 
-    def import_provider_ranking(self):
+    def import_provider_ranking(self, score_index):
         """
         import ground truth ranking information from dataset file
         :return:
@@ -35,10 +35,10 @@ class CompareData:
             for line in rank_file:
                 provider = line[5].strip()
                 # quality=24, pi=47, ia=75, cost=85, mip=20
-                if (line[20].strip() == ''):
+                if (line[score_index].strip() == ''):
                     continue
                 else:
-                    score = float(line[20].strip())
+                    score = float(line[score_index].strip())
                 # if duplicate, ignore
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))
@@ -110,13 +110,13 @@ class CompareData:
             values = self.provider_specialty_ranking[specialty]
             self.provider_specialty_ranking[specialty] = sorted(values, key=lambda item: item[1], reverse=True)
 
-    def setup_evaluate(self):
+    def setup_evaluate(self, score_index=20):
         """
         setup comparison object for evaluation
         :param graph: graph to get specialty info from
         :return:
         """
-        self.import_provider_ranking()
+        self.import_provider_ranking(score_index)
         self.add_provider_specialties()
         self.import_taxonomy_info()
         self.sort_scores()
@@ -468,7 +468,7 @@ class CompareData:
             else:
                 self.save_results(save_file_name, save_info)
 
-    def get_mean_score(self, computed_ranking:dict, n_range=range(10, 50, 10), top_specialties=5):
+    def get_mean_score(self, computed_ranking:dict, n_range=range(10, 60, 10), top_specialties=5):
         """
         get the mean of all ndcg and hits@n scores, "overall" ranking
         :param computed_ranking: dictionary of specialty : scores
@@ -476,7 +476,7 @@ class CompareData:
         :param top_specialties: specialties to consider in comparison, based on most available scores in ground truth
         :return:
         """
-        trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, top_specialties)
+        trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, 100, top_specialties)
 
         # calculate evaluations
         total_mean = 0

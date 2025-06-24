@@ -304,7 +304,7 @@ class GraphBuilder:
                 if not overlapping_specialties or specialty_dict[npi][-1] != self.graph.nodes[npi]["primary"]:
                     remove_nodes.append(npi)
                 else:
-                    self.graph.nodes[npi]["specialties"] = overlapping_specialties
+                    self.graph.nodes[npi]["specialties"] = list(overlapping_specialties)
             else:
                 remove_nodes.append(npi)
 

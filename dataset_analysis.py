@@ -3,19 +3,20 @@ import numpy as np
 import csv
 
 
-def get_score_correlation(graph:Graph, score_file:str="pa_scores.csv"):
+def get_score_correlation(graph:Graph, score_file:str="./datasets/pa_scores_2017.csv"):
     node_scores = {}
     with open(score_file, "r") as data_file:
         scores_csv = csv.reader(data_file)
         next(scores_csv)
         for line in scores_csv:
-            provider = int(line[0].strip())
+            provider = int(line[5].strip())
+            # quality=24, pi=47, ia=75, cost=85, mip=20
             if provider in graph.nodes:
-                final = (line[12].strip())
-                quality = (line[7].strip())
-                pi = (line[8].strip())
-                ia = (line[9].strip())
-                cost = (line[10].strip())
+                final = (line[20].strip())
+                quality = (line[24].strip())
+                pi = (line[47].strip())
+                ia = (line[75].strip())
+                cost = (line[85].strip())
                 node_scores[provider] = [final, quality, pi, ia, cost]
                 converted = []
                 for score in node_scores[provider]:

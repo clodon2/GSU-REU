@@ -9,6 +9,17 @@ from import_from_outside import get_djalil_coboundary, import_djalil_sheaf_lapla
 from dataset_analysis import get_score_correlation
 
 
+def eval_degree():
+    graph_builder = GraphBuilder(primary_specialty_weight=2)
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv")
+    eval_compare = CompareData()
+    eval_compare.setup_evaluate()
+    em = EvaluationMethods(graph)
+    degree_rank = em.degrees(eval_compare.get_top_spec_names(100, 10))
+    eval_compare.evaluate_all_and_save(degree_rank, title="Degree", save_unfiltered=True,
+                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+
+
 def eval_sheaf_lap():
     graph_builder = GraphBuilder(primary_specialty_weight=2)
     graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv")
@@ -30,6 +41,16 @@ def eval_sheaf_lap():
     eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
                                        save_type="append", hits_n=50, ndcg_n=50, top_specialties=10)
 
+def eval_degree_results():
+    eval_compare = CompareData()
+    eval_compare.setup_evaluate()
+    degree_ranks = eval_compare.extract_ranking("./results/results_unfilteredDegrees.csv")
+    top_specs = eval_compare.get_top_spec_names(100, 10)
+    for i, spec in enumerate(top_specs):
+        print("Specialty", i)
+        print(spec, sorted(degree_ranks[spec], reverse=True, key=lambda score: score[1])[:20])
+        print(spec, eval_compare.groupify_same_scores(eval_compare.provider_specialty_ranking[spec])[:20])
+
 def eval_sheaf_lap_from_file():
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
@@ -47,7 +68,8 @@ def eval_sheaf_lap_from_file():
 
 def evaluate_all_methods():
     graph_builder = GraphBuilder()
-    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv")
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv",
+                                      remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
@@ -59,7 +81,7 @@ def evaluate_all_methods():
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
 
-    specialty_names = eval_compare.get_top_spec_names(n=100, top_spec_num=25)
+    specialty_names = eval_compare.get_top_spec_names(n=100, top_spec_num=10)
 
     ev = EvaluationMethods(graph)
 
@@ -86,26 +108,76 @@ def evaluate_all_methods():
             eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
                                                save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
 
+def evaluate_all_methods_all_scores():
+    graph_builder = GraphBuilder()
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv",
+                                      remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
+    # 1, .1, .05
+    sheaf_laplacian = SheafLaplacian(graph=graph,
+                                     coboundary_columns=graph_builder.coboundary_columns,
+                                     restriction_weights=[1, 1, 1], primary_specialty_weight=2)
+    # .36131, 1.1985, 1.888
+    sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings()
+    # replace this with some other specialty name list
+
+    eval_compare = CompareData()
+    eval_compare.setup_evaluate()
+
+    specialty_names = eval_compare.get_top_spec_names(n=100, top_spec_num=10)
+
+    ev = EvaluationMethods(graph)
+
+    print("page ranking...")
+    rankings_pr = ev.page_rank_all_specialties(specialty_names)
+    print("regular laplacian...")
+    rankings_rl = ev.regular_laplacian(specialty_names)
+    print("degrees...")
+    rankings_dg = ev.degrees(specialty_names)
+    print("evaluating...")
+
+    method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"),
+                       (rankings_rl, "RegularLaplacian"), (rankings_dg, "Degrees")]
+    # , (rankings_sir, "SIR")
+
+    eval_compare.save_actual_rankings()
+
+    # quality=24, pi=47, ia=75, cost=85, mip=20
+    score_indices = [("mips", 20), ("quality", 24), ("pi", 47), ("ia", 75), ("cost", 85)]
+    for score_method in score_indices:
+        score_name = score_method[0]
+        score_index = score_method[1]
+        eval_compare.setup_evaluate(score_index)
+        for method_info in method_rankings:
+            ranking = method_info[0]
+            title = method_info[1]
+            eval_compare.evaluate_all_and_save(ranking, title=title + score_name, save_unfiltered=True,
+                                           save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+            for i in range(20, 60, 10):
+                eval_compare.evaluate_all_and_save(ranking, title=title + score_name, save_unfiltered=False,
+                                                   save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
+
+
 class OptimizeWeights:
     def __init__(self):
         graph_builder = GraphBuilder(primary_specialty_weight=2)
-        graph = graph_builder.build_graph(rows=10000, remove_unscored_nodes_file="pa_scores.csv")
+        graph = graph_builder.build_graph(rows=999999999999999, remove_unscored_nodes_file="./datasets/pa_scores_2017.csv",
+                                          remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
         self.sheaf_laplacian = SheafLaplacian(graph=graph,
                                               coboundary_columns=graph_builder.coboundary_columns,
                                               restriction_weights=[1, 1, 1],
                                               primary_specialty_weight=2)
         self.eval_compare = CompareData()
-        self.eval_compare.setup_evaluate(graph)
+        self.eval_compare.setup_evaluate(score_index=20)
 
     def get_weight_score(self, weights):
         self.sheaf_laplacian.primary_specialty_weight = weights[:1]
         self.sheaf_laplacian.restriction_weights = weights[1:]
         sheaf_laplacian_rankings = self.sheaf_laplacian.compute_all_give_rankings()
-        return self.eval_compare.get_mean_score(sheaf_laplacian_rankings)
+        return self.eval_compare.get_mean_score(sheaf_laplacian_rankings, top_specialties=10)
 
     def find_best_weights(self):
-        DE = DifferentialEvolution(population_size=20, problem_dimensions=4, iterations=20, scaling_factor=.5,
-                                   crossover_chance=.7, search_space=[0, 2], fitness_function=self.get_weight_score)
+        DE = DifferentialEvolution(population_size=8, problem_dimensions=4, iterations=20, scaling_factor=.5,
+                                   crossover_chance=.7, search_space=[-2, 2], fitness_function=self.get_weight_score)
         return DE.run()
 
 
@@ -253,11 +325,11 @@ def build_graph_test():
 
 
 if __name__ == "__main__":
-    evaluate_all_methods()
+    #evaluate_all_methods_all_scores()
     #get_type_correlation()
     #eval_djalil_centrality_direct()
     #eval_djalil_no_spec_import()
     #evaluate_all_methods()
-    #ow = OptimizeWeights()
-    #print(ow.find_best_weights())
+    ow = OptimizeWeights()
+    print(ow.find_best_weights())
     # suggested weights at 1000: (0.5440900111139723, array([0.69067041, 0.59055783, 0.        ]))

@@ -101,7 +101,7 @@ class SheafLaplacian:
         self.sheaf_laplacian = None
         self.rankings = {}
 
-    def compute_coboundary_map(self):
+    def compute_coboundary_map(self, include_edge_indices=False):
         """
         add coboundary map to each edge, based on each provider's unique restriction map for each edge
         :return:
@@ -120,6 +120,8 @@ class SheafLaplacian:
             edge_same_days = edge_attr["same_day"]
             # edge_restrictions = []
             for provider in edge:
+                if include_edge_indices:
+                    self.graph.nodes[provider]["edge_indices"].append(i)
                 # get restriction maps based on provider edge percentages
                 pair_percentage = self.restriction_weights[0] * (edge_pairs)
                 bene_total = self.restriction_weights[1] * (edge_benes)
@@ -272,7 +274,7 @@ class SheafLaplacian:
 
         return node, centrality
 
-    def compute_centralities_multiprocessing_remove_whole(self):
+    def compute_centralities_multiprocessing_remove_whole(self, only_top_specialties=[]):
         """
         calculate the centrality of every node by removing the columns and edges
         :return:
@@ -285,7 +287,6 @@ class SheafLaplacian:
         self.coboundary_map = self.coboundary_map.tocsr()
         all_columns = np.arange(self.coboundary_map.shape[1])
         all_rows = np.arange(self.coboundary_map.shape[0])
-        pool_args = []
         print("generating pool args")
 
         # divide up total work into groups to avoid pickling errors with large node number
@@ -295,16 +296,29 @@ class SheafLaplacian:
 
         # process groups, centralities
         results = []
+        start = time.time()
         for group in groups:
-            for i, node in enumerate(group):
-                pool_args.append((sheaf_laplacian_energy, node, all_columns, all_rows))
+            if only_top_specialties:
+                for node in group:
+                    keep_indices = []
+                    # find indexes of specialties to keep
+                    for i, specialty in enumerate(self.graph.nodes[node]["specialties"]):
+                        if specialty in only_top_specialties:
+                            keep_indices.append(i)
+                    # modify indices and specialties together for consistency
+                    new_specs = []
+                    new_spec_names = []
+                    for index in keep_indices:
+                        new_specs.append(self.graph.nodes[node]["indices"][index])
+                        new_spec_names.append(self.graph.nodes[node]["specialties"][index])
+                    self.graph.nodes[node]["indices"] = new_specs
+                    self.graph.nodes[node]["specialties"] = new_spec_names
+
+            pool_args = [(sheaf_laplacian_energy, node, all_columns, all_rows) for node in group]
             print("computing sheaf laplacian centralities", groups.index(group))
-            start = time.time()
             with Pool(processes=10) as pool:
                 results.extend(pool.starmap(self.compute_centralities_multiprocessing_remove_whole_helper, pool_args,
                                             chunksize=500))
-
-        print(f"found in {time.time() - start}")
 
         end = time.time()
         print(f"energies found in {end - start}")
@@ -331,6 +345,19 @@ class SheafLaplacian:
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
         self.compute_centralities_multiprocessing(only_top_specialties)
+        ranking = self.get_ranking()
+
+        return ranking
+
+    def compute_all_give_rankings_whole_removal(self, only_top_specialties=[]):
+        """
+        compute everything needed to get rankings and print them
+        :return:
+        """
+        print("computing all for ranking...")
+        self.compute_coboundary_map(include_edge_indices=True)
+        self.compute_sheaf_laplacian()
+        self.compute_centralities_multiprocessing_remove_whole(only_top_specialties)
         ranking = self.get_ranking()
 
         return ranking

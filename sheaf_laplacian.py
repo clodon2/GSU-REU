@@ -73,21 +73,18 @@ def compute_centralities_multiprocessing_helper(args):
     sheaf_laplacian_energy, all_columns, node_data = args
     global _shared_coboundary
     coboundary_map = load_shared_csc(_shared_coboundary)
-    node, indices = node_data
-    node_centralities = []
+    node, index, specialty = node_data
     # for each specialty, get the centrality score
-    for specialty_index in indices:
-        include_cols = np.setdiff1d(all_columns, [specialty_index])
-        sub_coboundary = coboundary_map[:, include_cols]
+    include_cols = np.setdiff1d(all_columns, [index])
+    sub_coboundary = coboundary_map[:, include_cols]
 
-        # sheaf laplacian of coboundary w/ removed
-        sheaf_laplacian = sub_coboundary.transpose().dot(sub_coboundary)
-        spec_energy = np.sum(sheaf_laplacian.data ** 2)
-        # centrality (impact) for each specialty of each node
-        centrality = (sheaf_laplacian_energy - spec_energy) / sheaf_laplacian_energy
-        node_centralities.append(centrality)
+    # sheaf laplacian of coboundary w/ removed
+    sheaf_laplacian = sub_coboundary.transpose().dot(sub_coboundary)
+    spec_energy = np.sum(sheaf_laplacian.data ** 2)
+    # centrality (impact) for each specialty of each node
+    centrality = (sheaf_laplacian_energy - spec_energy) / sheaf_laplacian_energy
 
-    return node, node_centralities
+    return node, centrality, specialty
 
 
 class SheafLaplacian:
@@ -169,7 +166,7 @@ class SheafLaplacian:
 
         return sheaf_lap
 
-    def compute_centralities_multiprocessing(self):
+    def compute_centralities_multiprocessing(self, only_top_specialties:list=[]):
         """
         calculate the centralities for every specialty of every node by removing the column of the specialty
         :return:
@@ -199,7 +196,7 @@ class SheafLaplacian:
             "indptr_shape": shared["indptr_shape"]
         }
 
-        # divide up total work into groups to avoid pickling errors with large node number
+        # divide up total work into groups to avoid pickling errors with large node number (deprecated for <500k nodes)
         group_size = 100_000
         divisions = ceil(len(self.graph.nodes) / group_size)
         groups = [list(self.graph.nodes)[i * group_size:(i + 1) * group_size] for i in range(divisions)]
@@ -210,9 +207,17 @@ class SheafLaplacian:
         results = []
         start = time.time()
         for g, group in enumerate(groups):
-            pool_args = [(sheaf_laplacian_energy, all_columns, (node, self.graph.nodes[node]["indices"])) for node in group]
-            print(f"processing group {g+1} of {len(groups)} with {len(pool_args)} nodes")
-            with Pool(processes=10, initializer=init_worker, initargs=(shared_data_for_pool, )) as pool:
+            pool_args = []
+            for node in group:
+                for specialty, node_index in zip(self.graph.nodes[node]["specialties"], self.graph.nodes[node]["indices"]):
+                    # if only need certain specialty centralities, only add those to process list
+                    if only_top_specialties:
+                        if specialty in only_top_specialties:
+                            pool_args.append((sheaf_laplacian_energy, all_columns, (node, node_index, specialty)))
+                    else:
+                        pool_args.append((sheaf_laplacian_energy, all_columns, (node, node_index, specialty)))
+            print(f"processing group {g+1} of {len(groups)} with {len(pool_args)} specialties of nodes")
+            with Pool(processes=15, initializer=init_worker, initargs=(shared_data_for_pool, )) as pool:
                 results_iter = (pool.imap_unordered(compute_centralities_multiprocessing_helper, pool_args, chunksize=30))
                 for result in tqdm(results_iter, total=len(pool_args), file=sys.stdout):
                     results.append(result)
@@ -228,14 +233,13 @@ class SheafLaplacian:
         # add results to ranking dict
         for entry in results:
             node = entry[0]
-            centralities = entry[1]
-            for specialty, centrality in zip(self.graph.nodes[node]["specialties"], centralities):
-                # add to rankings for specialty
-                if specialty in self.rankings:
-                    self.rankings[specialty][node] = centrality
-                else:
-                    self.rankings[specialty] = {}
-                    self.rankings[specialty][node] = centrality
+            centrality = entry[1]
+            specialty = entry[2]
+            if specialty in self.rankings:
+                self.rankings[specialty][node] = centrality
+            else:
+                self.rankings[specialty] = {}
+                self.rankings[specialty][node] = centrality
 
         end = time.time()
         print(f"energies found in {end - start}")
@@ -316,7 +320,7 @@ class SheafLaplacian:
             sorted_rankings[specialty] = sorted(values.items(), key=lambda item: item[1], reverse=True)
         return sorted_rankings
 
-    def compute_all_give_rankings(self):
+    def compute_all_give_rankings(self, only_top_specialties=[]):
         """
         compute everything needed to get rankings and print them
         :return:
@@ -324,7 +328,7 @@ class SheafLaplacian:
         print("computing all for ranking...")
         self.compute_coboundary_map()
         self.compute_sheaf_laplacian()
-        self.compute_centralities_multiprocessing()
+        self.compute_centralities_multiprocessing(only_top_specialties)
         ranking = self.get_ranking()
 
         return ranking

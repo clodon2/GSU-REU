@@ -22,14 +22,16 @@ def eval_degree():
 
 def eval_sheaf_lap():
     graph_builder = GraphBuilder(primary_specialty_weight=2)
-    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv")
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv",
+                                      remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
     sheaf_laplacian = SheafLaplacian(graph,
                                      graph_builder.coboundary_columns,
                                      restriction_weights=[1, 1, 1],
                                      primary_specialty_weight=2)
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
-    sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings()
+    top_specs = eval_compare.get_top_spec_names(100, 10)
+    sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings(top_specs)
     eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
                                        save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
     eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
@@ -325,11 +327,12 @@ def build_graph_test():
 
 
 if __name__ == "__main__":
+    eval_sheaf_lap()
     #evaluate_all_methods_all_scores()
     #get_type_correlation()
     #eval_djalil_centrality_direct()
     #eval_djalil_no_spec_import()
     #evaluate_all_methods()
-    ow = OptimizeWeights()
-    print(ow.find_best_weights())
+    #ow = OptimizeWeights()
+    #print(ow.find_best_weights())
     # suggested weights at 1000: (0.5440900111139723, array([0.69067041, 0.59055783, 0.        ]))

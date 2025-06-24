@@ -4,6 +4,8 @@ import scipy as sp
 import time
 from multiprocessing import Pool, shared_memory
 from math import ceil
+from tqdm import tqdm
+import sys
 
 
 _shared_coboundary = None
@@ -61,15 +63,14 @@ def load_shared_csc(meta):
     )
     return sp.sparse.csc_matrix((data, indices, indptr), shape=meta["shape"])
 
-def compute_centralities_multiprocessing_helper(sheaf_laplacian_energy, all_columns, node_data):
+def compute_centralities_multiprocessing_helper(args):
     """
     each worker performs this function, finds all specialty centralities for a single node
-    :param sheaf_laplacian_energy: energy of the sheaf laplacian without removing anything
-    :param node: node to get specialty energies for
-    :param i: node number, not needed
+    :param args: contains entire sheaf laplacian energy, all column array and node data tuple in order
     :return: node id, centralities in order same as node specialties
     """
     # should be csc
+    sheaf_laplacian_energy, all_columns, node_data = args
     global _shared_coboundary
     coboundary_map = load_shared_csc(_shared_coboundary)
     node, indices = node_data
@@ -145,6 +146,7 @@ class SheafLaplacian:
         self.coboundary_map = coboundary_map
         end = time.time()
         print(f"coboundary map found in {end - start}")
+        print(f"coboundary shape: {self.coboundary_map.shape}")
 
         return coboundary_map
 
@@ -211,8 +213,9 @@ class SheafLaplacian:
             pool_args = [(sheaf_laplacian_energy, all_columns, (node, self.graph.nodes[node]["indices"])) for node in group]
             print(f"processing group {g+1} of {len(groups)} with {len(pool_args)} nodes")
             with Pool(processes=10, initializer=init_worker, initargs=(shared_data_for_pool, )) as pool:
-                results.extend(pool.starmap(compute_centralities_multiprocessing_helper,
-                                            pool_args, chunksize=500))
+                results_iter = (pool.imap_unordered(compute_centralities_multiprocessing_helper, pool_args, chunksize=30))
+                for result in tqdm(results_iter, total=len(pool_args), file=sys.stdout):
+                    results.append(result)
 
         print("cleaning shared memory...")
         shared["data"].close()

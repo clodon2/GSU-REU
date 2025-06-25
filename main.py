@@ -9,10 +9,24 @@ from import_from_outside import get_djalil_coboundary, import_djalil_sheaf_lapla
 from dataset_analysis import get_score_correlation
 import time
 
+def eval_spec_number():
+    graph_builder = GraphBuilder(primary_specialty_weight=2)
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv", remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
+    total_specs = 0
+    for node in graph.nodes:
+        for spec in graph.nodes[node]["specialties"]:
+            total_specs += 1
+
+    all_indices = []
+    for node in graph.nodes:
+        all_indices.append(graph.nodes[node]["indices"][-1])
+
+    print("total specialties in graph:", total_specs)
+    print("max index in cm: ", max(all_indices))
 
 def eval_degree():
     graph_builder = GraphBuilder(primary_specialty_weight=2)
-    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv")
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv", remove_non_overlap_spec_file="./datasets/specialty_2018.csv")
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
     em = EvaluationMethods(graph)
@@ -97,15 +111,14 @@ def evaluate_all_methods():
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
-                                     restriction_weights=[1, 1, 1], primary_specialty_weight=2)
-    # .36131, 1.1985, 1.888
-    sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings()
-    # replace this with some other specialty name list
-
+                                     restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757)
+    # restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
 
     specialty_names = eval_compare.get_top_spec_names(n=100, top_spec_num=10)
+    sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings(only_top_specialties=specialty_names)
+    # replace this with some other specialty name list
 
     ev = EvaluationMethods(graph)
 
@@ -140,7 +153,7 @@ def evaluate_all_methods_all_scores():
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
                                      restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757)
-    # .36131, 1.1985, 1.888
+    # restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
 
@@ -354,8 +367,8 @@ def build_graph_test():
 
 
 if __name__ == "__main__":
-    #eval_sheaf_lap()
-    evaluate_all_methods_all_scores()
+    eval_sheaf_lap()
+    #evaluate_all_methods_all_scores()
     #get_type_correlation()
     #eval_djalil_centrality_direct()
     #eval_djalil_no_spec_import()

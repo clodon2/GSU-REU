@@ -119,7 +119,7 @@ class SheafLaplacian:
             edge_benes = edge_attr["beneficiaries"]
             edge_same_days = edge_attr["same_day"]
             # edge_restrictions = []
-            for provider in edge:
+            for num, provider in enumerate(edge):
                 if include_edge_indices:
                     self.graph.nodes[provider]["edge_indices"].append(i)
                 # get restriction maps based on provider edge percentages
@@ -134,7 +134,11 @@ class SheafLaplacian:
                     if self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] != self.primary_specialty_weight:
                         self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] = self.primary_specialty_weight
                 # add info to array for sparse matrix conversion
-                nonzero_restrictions.extend((self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction)).tolist())
+                restriction_map = self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction)
+                # one restriction map is negative
+                if num == 1:
+                    restriction_map *= -1
+                nonzero_restrictions.extend(restriction_map.tolist())
                 nzr_column_indices.extend(self.graph.nodes[provider]["indices"])
                 for input_num in range(len(self.graph.nodes[provider]["indices"])):
                     nzr_row_indices.append(i)

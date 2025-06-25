@@ -47,3 +47,16 @@ def get_score_correlation(graph:Graph, score_file:str="./datasets/pa_scores_2017
             correlation_matrix = np.corrcoef(x, y)
             correlation_coefficient = correlation_matrix[0, 1]
             print(f"{score_type} correlation for {total_type}: {correlation_coefficient}")
+
+def row_check(file:str):
+    rows = 0
+    with open(file, "r", encoding="utf-8") as row_file:
+        row_reader = csv.reader(row_file)
+        for row in row_reader:
+            rows += 1
+
+    return rows
+
+
+if __name__ == "__main__":
+    print(row_check("./datasets/specialty_2018.csv"))

@@ -174,7 +174,7 @@ class GraphBuilder:
             self.graph.nodes[node]["indices"] = list(range(col, col + spec_num))
             self.graph.nodes[node]["edge_indices"] = []
             # start at next free index
-            col += spec_num + 1
+            col += spec_num
             # start with one to avoid division by 0 in add_coboundary_matrices
             self.graph.nodes[node]["pair_total"] = 1
             self.graph.nodes[node]["beneficiary_total"] = 1

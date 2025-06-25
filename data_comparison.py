@@ -330,6 +330,7 @@ class CompareData:
         trim rankings to top n specialties
         :param computed_ranking: ranking computed
         :param n: number of elements specialties must have to be included
+        :param top_spec_num: number of top specialties to consider, determined by gt frequency
         :return: dict of specialty: dict of label:ranking
         """
         output = {}
@@ -412,6 +413,9 @@ class CompareData:
                     write.writerow([key, computed_ranking[key]])
 
         trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, hits_n, top_specialties)
+        top_specs = self.get_top_spec_names(100, 10)
+        for specialty in top_specs:
+            print(title, specialty, len(self.groupify_same_scores(trimmed_rankings_by_specialty[specialty]["final_ranked"])), len(trimmed_rankings_by_specialty[specialty]["final_computed"]))
         """
         if title == "Closness":
             for specialty in trimmed_rankings_by_specialty:

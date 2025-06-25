@@ -70,13 +70,20 @@ def compute_centralities_multiprocessing_helper(args):
     :return: node id, centralities in order same as node specialties
     """
     # should be csc
-    sheaf_laplacian_energy, all_columns, node_data = args
+    sheaf_laplacian_energy, node_data = args
     global _shared_coboundary
     coboundary_map = load_shared_csc(_shared_coboundary)
     node, index, specialty = node_data
     # for each specialty, get the centrality score
-    include_cols = np.setdiff1d(all_columns, [index])
-    sub_coboundary = coboundary_map[:, include_cols]
+    # cut out specialty column with mask (efficient vs hstack or setdiff1d)
+    keep = np.ones(coboundary_map.shape[1], dtype=bool)
+    keep[index] = False
+    sub_coboundary = coboundary_map[:, keep]
+    """
+    left = coboundary_map[:, :index]
+    right = coboundary_map[:, index + 1:]
+    sub_coboundary = sp.sparse.hstack([left, right], format='csc')
+    """
 
     # sheaf laplacian of coboundary w/ removed
     sheaf_laplacian = sub_coboundary.transpose().dot(sub_coboundary)
@@ -123,9 +130,9 @@ class SheafLaplacian:
                 if include_edge_indices:
                     self.graph.nodes[provider]["edge_indices"].append(i)
                 # get restriction maps based on provider edge percentages
-                pair_percentage = self.restriction_weights[0] * (edge_pairs / self.graph.nodes[provider]["pair_total"])
-                bene_total = self.restriction_weights[1] * (edge_benes / self.graph.nodes[provider]["beneficiary_total"])
-                same_day_total = self.restriction_weights[2] * (edge_same_days / self.graph.nodes[provider]["same_total"])
+                pair_percentage = self.restriction_weights[0] * (edge_pairs)
+                bene_total = self.restriction_weights[1] * (edge_benes)
+                same_day_total = self.restriction_weights[2] * (edge_same_days)
                 restriction = np.array([pair_percentage, bene_total, same_day_total])
 
                 # check primary weight is correct
@@ -134,7 +141,7 @@ class SheafLaplacian:
                     if self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] != self.primary_specialty_weight:
                         self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] = self.primary_specialty_weight
                 # add info to array for sparse matrix conversion
-                restriction_map = self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction)
+                restriction_map = self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction) * self.graph.degree(provider) / 50
                 # one restriction map is negative
                 if num == 1:
                     restriction_map *= -1
@@ -185,7 +192,6 @@ class SheafLaplacian:
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
         # convert coboundary map for column removal later
         self.coboundary_map = self.coboundary_map.tocsc()
-        all_columns = np.arange(self.coboundary_map.shape[1])
         print("generating pool args")
 
         print("setting up shared memory...")
@@ -220,9 +226,9 @@ class SheafLaplacian:
                     # if only need certain specialty centralities, only add those to process list
                     if only_top_specialties:
                         if specialty in only_top_specialties:
-                            pool_args.append((sheaf_laplacian_energy, all_columns, (node, node_index, specialty)))
+                            pool_args.append((sheaf_laplacian_energy, (node, node_index, specialty)))
                     else:
-                        pool_args.append((sheaf_laplacian_energy, all_columns, (node, node_index, specialty)))
+                        pool_args.append((sheaf_laplacian_energy, (node, node_index, specialty)))
             print(f"processing group {g+1} of {len(groups)} with {len(pool_args)} specialties of nodes")
             with Pool(processes=15, initializer=init_worker, initargs=(shared_data_for_pool, )) as pool:
                 # use imap to give iterable to track results with tqdm

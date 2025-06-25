@@ -277,8 +277,6 @@ class GraphBuilder:
             if i > 0:
                 self.graph.remove_nodes_from(component)
 
-        print(len(components[0]), "cc")
-
         print(num_nodes - self.graph.number_of_nodes(), "unconnected nodes removed")
 
     def remove_non_overlap_specialties(self, specialty_file):

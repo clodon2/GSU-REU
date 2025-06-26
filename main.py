@@ -25,15 +25,19 @@ def eval_spec_number():
     print("total specialties in graph:", total_specs)
     print("max index in cm: ", max(all_indices))
 
-def eval_degree():
+def eval_other_method():
     graph_builder = GraphBuilder(primary_specialty_weight=2)
-    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv", remove_non_overlap_spec_file="./datasets/specialty_2018.csv")
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv",
+                                      remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
     em = EvaluationMethods(graph)
-    degree_rank = em.degrees(eval_compare.get_top_spec_names(100, 10))
-    eval_compare.evaluate_all_and_save(degree_rank, title="Degree", save_unfiltered=True,
+    method_rank = em.regular_laplacian(eval_compare.get_top_spec_names(100, 10))
+    eval_compare.evaluate_all_and_save(method_rank, title="RegularLaplacian", save_unfiltered=True,
                                        save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+    for i in range(20, 60, 10):
+        eval_compare.evaluate_all_and_save(method_rank, title="RegularLaplacian", save_unfiltered=False,
+                                           save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
 
 
 def eval_sheaf_lap():
@@ -213,7 +217,7 @@ class OptimizeWeights:
 
     def find_best_weights(self):
         start = time.time()
-        DE = DifferentialEvolution(population_size=8, problem_dimensions=4, iterations=20, scaling_factor=.3,
+        DE = DifferentialEvolution(population_size=12, problem_dimensions=4, iterations=23, scaling_factor=.3,
                                    crossover_chance=.7, search_space=[-2, 2], fitness_function=self.get_weight_score)
         results = DE.run()
         end = time.time() - start
@@ -366,8 +370,7 @@ def build_graph_test():
 
 
 if __name__ == "__main__":
-    evaluate_all_methods()
-    combine_for_graphs(output_write_type="w")
+    #eval_other_method()
     #get_type_correlation()
     #eval_djalil_centrality_direct()
     #eval_djalil_no_spec_import()

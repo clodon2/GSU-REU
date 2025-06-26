@@ -2,11 +2,76 @@ from networkx import Graph, pagerank
 import networkx as nx
 import numpy as np
 import scipy as sp
-from multiprocessing import Pool
+from multiprocessing import Pool, shared_memory
 from scipy.sparse import csr_matrix
 from math import ceil
 from tqdm import tqdm
+from time import time
+import sys
 
+
+_shared_laplacian = None
+def init_worker(shared_data):
+    global _shared_laplacian
+    _shared_laplacian = {
+        "data": shared_memory.SharedMemory(name=shared_data["data_name"]),
+        "indices": shared_memory.SharedMemory(name=shared_data["indices_name"]),
+        "indptr": shared_memory.SharedMemory(name=shared_data["indptr_name"]),
+        "shape": shared_data["shape"],
+        "dtype": np.dtype(shared_data["dtype"]),
+        "indices_dtype": np.dtype(shared_data["indices_dtype"]),
+        "indptr_dtype": np.dtype(shared_data["indptr_dtype"]),
+        "data_shape": shared_data["data_shape"],
+        "indices_shape": shared_data["indices_shape"],
+        "indptr_shape": shared_data["indptr_shape"]
+    }
+
+def create_shared_csr(matrix: csr_matrix):
+    """Convert a CSR matrix to shared memory for multiprocessing."""
+    shm_data = shared_memory.SharedMemory(create=True, size=matrix.data.nbytes)
+    shm_indices = shared_memory.SharedMemory(create=True, size=matrix.indices.nbytes)
+    shm_indptr = shared_memory.SharedMemory(create=True, size=matrix.indptr.nbytes)
+
+    # Copy data into shared memory buffers
+    np.frombuffer(shm_data.buf, dtype=matrix.data.dtype)[:] = matrix.data
+    np.frombuffer(shm_indices.buf, dtype=matrix.indices.dtype)[:] = matrix.indices
+    np.frombuffer(shm_indptr.buf, dtype=matrix.indptr.dtype)[:] = matrix.indptr
+
+    return {
+        "data": shm_data,
+        "indices": shm_indices,
+        "indptr": shm_indptr,
+        "shape": matrix.shape,
+        "dtype": matrix.data.dtype,
+        "indices_dtype": matrix.indices.dtype,
+        "indptr_dtype": matrix.indptr.dtype,
+        "data_shape": matrix.data.shape,
+        "indices_shape": matrix.indices.shape,
+        "indptr_shape": matrix.indptr.shape
+    }
+
+def load_shared_csr(meta):
+    data = np.ndarray(shape=meta["data_shape"], dtype=meta["dtype"], buffer=meta["data"].buf)
+    indices = np.ndarray(shape=meta["indices_shape"], dtype=meta["indices_dtype"], buffer=meta["indices"].buf)
+    indptr = np.ndarray(shape=meta["indptr_shape"], dtype=meta["indptr_dtype"], buffer=meta["indptr"].buf)
+    return csr_matrix((data, indices, indptr), shape=meta["shape"])
+
+def laplacian_centrality_helper(args):
+    global _shared_laplacian
+    laplacian = load_shared_csr(_shared_laplacian)
+    node_index, node, full_laplacian_energy, degree, neighbors = args
+    removed_row = laplacian._getrow(node_index).toarray().flatten()
+    diagonal = removed_row[node_index]
+    row_energy = np.sum(removed_row ** 2)
+    E_sub = full_laplacian_energy - (2 * row_energy - (diagonal ** 2))
+    correction = 0
+    for neighbor in neighbors:
+        neighbor_diagonal = laplacian[neighbor, neighbor]
+        correction += 1 - (2 * neighbor_diagonal)
+
+    final_energy = E_sub + correction
+    centrality = (full_laplacian_energy - final_energy) / full_laplacian_energy
+    return node, centrality
 
 class EvaluationMethods:
     def __init__(self, graph):
@@ -73,172 +138,63 @@ class EvaluationMethods:
 
         return rankings
 
-    def laplacian_centrality_helper(self, args):
-        """
-        performed for each worker, compute centralitiy of each node by "removing" the node from the graph and
-        recomputing the energy and comparing it to the full energy; args contains:
-        :param i: index of node to remove/get centrality
-        :param node: node id
-        :param full_energy: energy without anything removed
-        :param normalized: normalize centrality to total
-        :return:
-        """
-        i, node, full_energy, normalized = args
-        # remove row and col i from lap_matrix
-        all_but_i = list(np.arange(self.laplacian.shape[0]))
-        all_but_i.remove(i)
-        A_2 = self.laplacian[all_but_i, :][:, all_but_i]
-
-        # Adjust diagonal for removed row
-        new_diag = self.laplacian.diagonal() - abs(self.laplacian[:, i])
-        A_2.setdiag(new_diag[all_but_i])
-
-        if len(all_but_i) > 0:  # catches degenerate case of single node
-            new_energy = np.sum(A_2 ** 2)
-        else:
-            new_energy = 0.0
-
-        lapl_cent = full_energy - new_energy
-        if normalized:
-            lapl_cent = lapl_cent / full_energy
-
-        return node, lapl_cent
-
-    def laplacian_centrality_multiprocessing(self, subgraph:Graph, normalized=True, nodelist=None, weight="pairs",
-                                             walk_type=None, alpha=0.95):
-        r"""FROM nx.algorithms.centrality.laplacian
-
-        Compute the Laplacian centrality for nodes in the graph `G`.
-
-        The Laplacian Centrality of a node ``i`` is measured by the drop in the
-        Laplacian Energy after deleting node ``i`` from the graph. The Laplacian Energy
-        is the sum of the squared eigenvalues of a graph's Laplacian matrix.
-
-        .. math::
-
-            C_L(u_i,G) = \frac{(\Delta E)_i}{E_L (G)} = \frac{E_L (G)-E_L (G_i)}{E_L (G)}
-
-            E_L (G) = \sum_{i=0}^n \lambda_i^2
-
-        Where $E_L (G)$ is the Laplacian energy of graph `G`,
-        E_L (G_i) is the Laplacian energy of graph `G` after deleting node ``i``
-        and $\lambda_i$ are the eigenvalues of `G`'s Laplacian matrix.
-        This formula shows the normalized value. Without normalization,
-        the numerator on the right side is returned.
-
-        Parameters
-        ----------
-        G : graph
-            A networkx graph
-
-        normalized : bool (default = True)
-            If True the centrality score is scaled so the sum over all nodes is 1.
-            If False the centrality score for each node is the drop in Laplacian
-            energy when that node is removed.
-
-        nodelist : list, optional (default = None)
-            The rows and columns are ordered according to the nodes in nodelist.
-            If nodelist is None, then the ordering is produced by G.nodes().
-
-        weight: string or None, optional (default=`weight`)
-            Optional parameter `weight` to compute the Laplacian matrix.
-            The edge data key used to compute each value in the matrix.
-            If None, then each edge has weight 1.
-
-        walk_type : string or None, optional (default=None)
-            Optional parameter `walk_type` used when calling
-            :func:`directed_laplacian_matrix <networkx.directed_laplacian_matrix>`.
-            One of ``"random"``, ``"lazy"``, or ``"pagerank"``. If ``walk_type=None``
-            (the default), then a value is selected according to the properties of `G`:
-            - ``walk_type="random"`` if `G` is strongly connected and aperiodic
-            - ``walk_type="lazy"`` if `G` is strongly connected but not aperiodic
-            - ``walk_type="pagerank"`` for all other cases.
-
-        alpha : real (default = 0.95)
-            Optional parameter `alpha` used when calling
-            :func:`directed_laplacian_matrix <networkx.directed_laplacian_matrix>`.
-            (1 - alpha) is the teleportation probability used with pagerank.
-
-        Returns
-        -------
-        nodes : dictionary
-           Dictionary of nodes with Laplacian centrality as the value.
-
-        Notes
-        -----
-        The algorithm is implemented based on [1]_ with an extension to directed graphs
-        using the ``directed_laplacian_matrix`` function.
-
-        Raises
-        ------
-        NetworkXPointlessConcept
-            If the graph `G` is the null graph.
-        ZeroDivisionError
-            If the graph `G` has no edges (is empty) and normalization is requested.
-
-        References
-        ----------
-        .. [1] Qi, X., Fuller, E., Wu, Q., Wu, Y., and Zhang, C.-Q. (2012).
-           Laplacian centrality: A new centrality measure for weighted networks.
-           Information Sciences, 194:240-253.
-           https://math.wvu.edu/~cqzhang/Publication-files/my-paper/INS-2012-Laplacian-W.pdf
-
-        See Also
-        --------
-        :func:`~networkx.linalg.laplacianmatrix.directed_laplacian_matrix`
-        :func:`~networkx.linalg.laplacianmatrix.laplacian_matrix`
-        """
-        G = subgraph
-        if len(G) == 0:
-            raise nx.NetworkXPointlessConcept("null graph has no centrality defined")
-        if G.size(weight=weight) == 0:
-            if normalized:
-                raise ZeroDivisionError("graph with no edges has zero full energy")
-            return dict.fromkeys(G, 0)
-
-        if nodelist is not None:
-            nodeset = set(G.nbunch_iter(nodelist))
-            if len(nodeset) != len(nodelist):
-                raise nx.NetworkXError("nodelist has duplicate nodes or nodes not in G")
-            nodes = nodelist + [n for n in G if n not in nodeset]
-        else:
-            nodelist = nodes = list(G)
-
-        if G.is_directed():
-            lap_matrix = nx.directed_laplacian_matrix(G, nodes, weight, walk_type, alpha)
-        else:
-            lap_matrix = nx.laplacian_matrix(G, nodes, weight)
-
-        self.laplacian = lap_matrix
-
-        full_energy = lap_matrix.power(2).sum()
-        # calculate laplacian centrality
-        laplace_centralities_dict = {}
-
+    def laplacian_centrality_multiprocessing(self, subgraph:Graph, weight="weight"):
         # divide up total work into groups to avoid pickling errors with large node number
-        group_size = 50_000
-        divisions = ceil(len(nodelist) / group_size)
-        groups = [nodelist[i * group_size:(i + 1) * group_size] for i in range(divisions)]
+        print("calculating centralities for specialty")
+        start = time()
+        laplacian = nx.laplacian_matrix(subgraph, weight=weight).tocsr()
+        full_laplacian_energy = np.sum(laplacian ** 2)
+        nodelist = subgraph.nodes
+        node_indices = {node:i for i, node in enumerate(nodelist)}
+
+        shared = create_shared_csr(laplacian)
+
+        # Pass only memory names to pool
+        shared_data_for_pool = {
+            "data_name": shared["data"].name,
+            "indices_name": shared["indices"].name,
+            "indptr_name": shared["indptr"].name,
+            "shape": shared["shape"],
+            "dtype": shared["dtype"].name,
+            "indices_dtype": shared["indices_dtype"].name,
+            "indptr_dtype": shared["indptr_dtype"].name,
+            "data_shape": shared["data_shape"],
+            "indices_shape": shared["indices_shape"],
+            "indptr_shape": shared["indptr_shape"]
+        }
+
+        pool_args = []
+
+        setup_time_start = time()
+        # setup arguments for helper function calls
+        for node, node_index in node_indices.items():
+            degree = subgraph.degree(node)
+            neighbors = [node_indices[n] for n in subgraph.neighbors(node)]
+            pool_args.append((node_index, node, full_laplacian_energy, degree, neighbors))
+        print(f"setup finished in {time() - setup_time_start}")
+
         results = []
-        for g, group in enumerate(groups):
-            pool_args = []
-            for i, node in enumerate(group):
-                i = nodelist.index(node)
-                pool_args.append((i, node, full_energy, normalized))
+        with Pool(processes=6, initializer=init_worker, initargs=(shared_data_for_pool,)) as pool:
+            results_iter = pool.imap_unordered(laplacian_centrality_helper, pool_args, chunksize=1)
+            for result in tqdm(results_iter, total=len(pool_args), file=sys.stdout):
+                results.append(result)
 
-            print(f"starting group {g}... with {len(group)} nodes")
-            with Pool(processes=12) as pool:
-                results_iter = (pool.imap_unordered(self.laplacian_centrality_helper, pool_args, chunksize=100))
-                for result in tqdm(results_iter, total=len(pool_args)):
-                    results.append(result)
+        shared["data"].close()
+        shared["data"].unlink()
+        shared["indices"].close()
+        shared["indices"].unlink()
+        shared["indptr"].close()
+        shared["indptr"].unlink()
 
+        laplacian_centralities = {}
         print("processing results...")
         for result in results:
             node = result[0]
             lapl_cent = result[1]
-            laplace_centralities_dict[node] = float(lapl_cent)
+            laplacian_centralities[node] = float(lapl_cent)
 
-        return laplace_centralities_dict
+        print(f"one regular laplacian specialty centrality set done in {time() - start}")
+        return laplacian_centralities
 
     def regular_laplacian(self, specialties:list):
         """
@@ -246,14 +202,13 @@ class EvaluationMethods:
         :param specialties: list of specialty names to subgraph and find centralities
         :return: dict[specialty][ = [scores]
         """
+        start = time()
         ranking = {}
-        for specialty in specialties:
-            try:
-                centralities = self.laplacian_centrality_multiprocessing(self.subgraph_given_specialty(specialty))
-                ranking[specialty] = list(centralities.items())
-            except:
-                pass
-
+        for s, specialty in enumerate(specialties):
+            print(f"specialty {s}")
+            centralities = self.laplacian_centrality_multiprocessing(self.subgraph_given_specialty(specialty))
+            ranking[specialty] = list(centralities.items())
+        print(f"regular laplacian centralities found in {time() - start}")
         return ranking
 
     def betweenness(self):

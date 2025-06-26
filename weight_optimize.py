@@ -27,8 +27,8 @@ class DifferentialEvolution:
             self.scores.append(score)
 
     def iteration(self):
-        print("iteration")
         for i, parent_vector in enumerate(self.population):
+            print(f"calculating parent {i + 1} of {len(self.population)}")
             target_vector, solutiona, solutionb = sample(self.population, 3)
             solution_difference = solutiona - solutionb
             trial_vector = target_vector + self.scaling_factor * solution_difference
@@ -62,6 +62,7 @@ class DifferentialEvolution:
     def run(self):
         self.initialize_population()
         for i in range(self.iterations):
+            print(f"Running iteration {i + 1} of {self.iterations}")
             self.iteration()
 
         # sort scores for final result

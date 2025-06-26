@@ -1,3 +1,5 @@
+from idlelib.iomenu import encoding
+
 import networkx as nx
 import time
 import csv
@@ -255,7 +257,6 @@ class GraphBuilder:
                 if converted[0] and converted[1] and converted[2] and converted[4] and primary_spec:
                     valid_providers.add(provider)
 
-        print(len(valid_providers))
         unscored_nodes = [node for node in self.graph.nodes if node not in valid_providers]
         print(f"removed {len(unscored_nodes)} no score nodes")
 
@@ -283,7 +284,7 @@ class GraphBuilder:
     def remove_non_overlap_specialties(self, specialty_file):
         print("removing non overlap nodes...")
         specialty_dict = {}
-        with open(specialty_file, "r") as actual_specialty_info:
+        with open(specialty_file, "r", encoding="utf-8") as actual_specialty_info:
             actual_specialty_info = csv.reader(actual_specialty_info)
             next(actual_specialty_info)
             for row in actual_specialty_info:

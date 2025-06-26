@@ -102,7 +102,7 @@ class EvaluationMethods:
 
         return node, lapl_cent
 
-    def laplacian_centrality_multiprocessing(self, subgraph:Graph, normalized=True, nodelist=None, weight="weight",
+    def laplacian_centrality_multiprocessing(self, subgraph:Graph, normalized=True, nodelist=None, weight="pairs",
                                              walk_type=None, alpha=0.95):
         r"""FROM nx.algorithms.centrality.laplacian
 

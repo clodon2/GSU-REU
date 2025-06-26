@@ -47,7 +47,7 @@ class GraphBuilder:
                 benes = int(row_data[3].strip())
                 sameday = int(row_data[4].strip())
 
-                self.graph.add_edge(provider1, provider2, weight=pairs, beneficiaries=benes, same_day=sameday)
+                self.graph.add_edge(provider1, provider2, pairs=pairs, beneficiaries=benes, same_day=sameday)
 
                 # stop at however many rows
                 if lines_read >= rows:
@@ -113,6 +113,7 @@ class GraphBuilder:
         if remove_non_overlap_spec_file:
             self.remove_non_overlap_specialties(remove_non_overlap_spec_file)
         self.remove_other_connections()
+        self.remove_leaf_nodes(18)
         self.sheaf_specialty_conversion()
         self.add_provider_totals()
         end = time.time()
@@ -180,7 +181,7 @@ class GraphBuilder:
             self.graph.nodes[node]["beneficiary_total"] = 1
             self.graph.nodes[node]["same_total"] = 1
             for connection in self.graph[node]:
-                pairs = self.graph[node][connection]["weight"]
+                pairs = self.graph[node][connection]["pairs"]
                 benes = self.graph[node][connection]["beneficiaries"]
                 same_days = self.graph[node][connection]["same_day"]
 
@@ -241,7 +242,7 @@ class GraphBuilder:
                 quality = line[24].strip()
                 pi = line[47].strip()
                 ia = line[75].strip()
-                cost = line[85].strip()
+                cost = line[86].strip()
                 final = line[20].strip()
                 scores = [quality, pi, ia, cost, final]
                 converted = []
@@ -251,7 +252,7 @@ class GraphBuilder:
                         new_score = float(score)
                     converted.append(new_score)
                 # provider for new dataset: 5 old: 0
-                if converted[0] and converted[1] and converted[2] and converted[3] and converted[4] and primary_spec:
+                if converted[0] and converted[1] and converted[2] and converted[4] and primary_spec:
                     valid_providers.add(provider)
 
         print(len(valid_providers))
@@ -308,6 +309,22 @@ class GraphBuilder:
         self.graph.remove_nodes_from(remove_nodes)
         print(f"removed spec different {len(remove_nodes)} from graph")
 
+    def remove_leaf_nodes(self, iterations=1):
+        """
+        remove nodes on the outer edge of the graph (with degree 1)
+        :param iterations: number of times to remove the outer edge nodes
+        :return:
+        """
+        print("removing leaf nodes..")
+        removed = 0
+        while True:
+            leaves = [node for node, degree in self.graph.degree() if degree<2]
+            if leaves:
+                self.graph.remove_nodes_from(leaves)
+                removed += len(leaves)
+            else:
+                break
+        print(f"removed {removed} leaf nodes")
 
     def draw_graph(self, edge_colors: bool = True, edge_labels: bool = True):
         """

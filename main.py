@@ -7,6 +7,7 @@ from weight_optimize import DifferentialEvolution
 from import_from_outside import get_djalil_coboundary, import_djalil_sheaf_laplacian_centrality, \
     import_djalil_ground_truth, import_djalil_graph
 from dataset_analysis import get_score_correlation
+from combine_comparisons import combine_for_graphs
 import time
 
 def eval_spec_number():
@@ -47,15 +48,15 @@ def eval_sheaf_lap():
     eval_compare.setup_evaluate()
     top_specs = eval_compare.get_top_spec_names(100, 10)
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings(top_specs)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianNonNormalized", save_unfiltered=True,
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
                                        save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianNonNormalized", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
                                        save_type="append", hits_n=20, ndcg_n=20, top_specialties=10)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianNonNormalized", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
                                        save_type="append", hits_n=30, ndcg_n=30, top_specialties=10)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianNonNormalized", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
                                        save_type="append", hits_n=40, ndcg_n=40, top_specialties=10)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianNonNormalized", save_unfiltered=False,
+    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
                                        save_type="append", hits_n=50, ndcg_n=50, top_specialties=10)
 
 def eval_sheaf_lap_remove_whole():
@@ -112,7 +113,7 @@ def evaluate_all_methods():
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
-                                     restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757)
+                                     restriction_weights=[1, 1, 1], primary_specialty_weight=1.5)
     # restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
@@ -215,7 +216,7 @@ class OptimizeWeights:
 
     def find_best_weights(self):
         start = time.time()
-        DE = DifferentialEvolution(population_size=5, problem_dimensions=4, iterations=6, scaling_factor=.5,
+        DE = DifferentialEvolution(population_size=14, problem_dimensions=4, iterations=40, scaling_factor=.5,
                                    crossover_chance=.7, search_space=[-2, 2], fitness_function=self.get_weight_score)
         results = DE.run()
         end = time.time() - start
@@ -368,12 +369,12 @@ def build_graph_test():
 
 
 if __name__ == "__main__":
-    eval_sheaf_lap_remove_whole()
-    #evaluate_all_methods_all_scores()
+    eval_sheaf_lap()
+    combine_for_graphs(output_write_type="w")
     #get_type_correlation()
     #eval_djalil_centrality_direct()
     #eval_djalil_no_spec_import()
     #evaluate_all_methods()
-    #ow = OptimizeWeights()
-    #print(ow.find_best_weights())
+    ow = OptimizeWeights()
+    print(ow.find_best_weights())
     # suggested weights primary: 1.05053757 other: [0.485446858, -1.72720085, 1.51242945]

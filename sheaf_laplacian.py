@@ -8,6 +8,41 @@ from tqdm import tqdm
 import sys
 
 
+def compute_coboundary_map_multiprocessing_helper(args):
+    i, edge, edge_attributes, u_vec, u_idx, u_deg, v_vec, v_idx, v_deg, restriction_weights = args
+    node_data = {edge[0]: {"sheaf_vector": u_vec,
+                           "indices": u_idx,
+                           "degree": u_deg},
+                 edge[1]: {"sheaf_vector": v_vec,
+                           "indices": v_idx,
+                           "degree": v_deg}
+                 }
+    nonzero_restrictions = []
+    nzr_row_indices = []
+    nzr_column_indices = []
+
+    edge_pairs = edge_attributes["pairs"]
+    edge_benes = edge_attributes["beneficiaries"]
+    edge_same_days = edge_attributes["same_day"]
+    for num, provider in enumerate(edge):
+        # get restriction maps based on provider edge percentages
+        pair_percentage = restriction_weights[0] * (edge_pairs)
+        bene_total = restriction_weights[1] * (edge_benes)
+        same_day_total = restriction_weights[2] * (edge_same_days)
+        restriction = np.array([pair_percentage, bene_total, same_day_total])
+
+        # add info to array for sparse matrix conversion
+        restriction_map = node_data[provider]["sheaf_vector"] * np.sum(restriction) * node_data[provider]["degree"] / 50
+        # one restriction map is negative
+        if num == 1:
+            restriction_map *= -1
+        nonzero_restrictions.extend(restriction_map.tolist())
+        nzr_column_indices.extend(node_data[provider]["indices"])
+        nzr_row_indices.extend([i] * len(node_data[provider]["indices"]))
+
+    return nzr_row_indices, nzr_column_indices, nonzero_restrictions
+
+
 _shared_sheaf_laplacian = None
 def init_worker(shared_data):
     global _shared_sheaf_laplacian
@@ -111,39 +146,42 @@ class SheafLaplacian:
         nonzero_restrictions = []
         nzr_row_indices = []
         nzr_column_indices = []
-        # coboundary_map = sp.sparse.lil_matrix((len(self.graph.edges), self.coboundary_columns), dtype=np.float64)
+
+        nodes = self.graph.nodes
+        for provider in self.graph.nodes:
+            # check primary weight is correct
+            primary = nodes[provider]["primary"]
+            if primary:
+                specialty_primary_index = nodes[provider]["specialties"].index(primary)
+                if nodes[provider]["sheaf_vector"][specialty_primary_index] != self.primary_specialty_weight:
+                    nodes[provider]["sheaf_vector"][specialty_primary_index] = self.primary_specialty_weight
+
         for i, edge in enumerate(self.graph.edges):
             # get edge specific values
-            edge_attr = self.graph.get_edge_data(edge[0], edge[1])
+            edge_attr = self.graph[edge[0]][edge[1]]
             edge_pairs = edge_attr["pairs"]
             edge_benes = edge_attr["beneficiaries"]
             edge_same_days = edge_attr["same_day"]
             # edge_restrictions = []
             for num, provider in enumerate(edge):
                 if include_edge_indices:
-                    self.graph.nodes[provider]["edge_indices"].append(i)
+                    nodes[provider]["edge_indices"].append(i)
                 # get restriction maps based on provider edge percentages
                 pair_percentage = self.restriction_weights[0] * (edge_pairs)
                 bene_total = self.restriction_weights[1] * (edge_benes)
                 same_day_total = self.restriction_weights[2] * (edge_same_days)
                 restriction = np.array([pair_percentage, bene_total, same_day_total])
 
-                # check primary weight is correct
-                if self.graph.nodes[provider]["primary"]:
-                    specialty_primary_index = self.graph.nodes[provider]["specialties"].index(self.graph.nodes[provider]["primary"])
-                    if self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] != self.primary_specialty_weight:
-                        self.graph.nodes[provider]["sheaf_vector"][specialty_primary_index] = self.primary_specialty_weight
                 # add info to array for sparse matrix conversion
-                restriction_map = self.graph.nodes[provider]["sheaf_vector"] * np.sum(restriction) * self.graph.degree(provider) / 50
+                restriction_map = nodes[provider]["sheaf_vector"] * np.sum(restriction) * self.graph.degree(provider) / 50
                 # one restriction map is negative
                 if num == 1:
                     restriction_map *= -1
                 nonzero_restrictions.extend(restriction_map.tolist())
-                nzr_column_indices.extend(self.graph.nodes[provider]["indices"])
-                for input_num in range(len(self.graph.nodes[provider]["indices"])):
-                    nzr_row_indices.append(i)
+                nzr_column_indices.extend(nodes[provider]["indices"])
+                nzr_row_indices.extend([i] * len(nodes[provider]["indices"]))
 
-        coboundary_map = sp.sparse.csr_matrix((nonzero_restrictions, (nzr_row_indices, nzr_column_indices)),
+        coboundary_map = sp.sparse.csc_matrix((nonzero_restrictions, (nzr_row_indices, nzr_column_indices)),
                                               shape=(len(self.graph.edges), self.coboundary_columns))
 
         self.coboundary_map = coboundary_map
@@ -152,6 +190,62 @@ class SheafLaplacian:
         print(f"coboundary shape: {self.coboundary_map.shape}")
 
         return coboundary_map
+
+    def compute_coboundary_map_multiprocessing(self, include_edge_indices=False):
+        print("computing coboundary map multiprocessing")
+        start = time.time()
+        nodes = self.graph.nodes
+        # update primary weights to match stored in class object
+        for provider, provider_data in nodes.items():
+            primary = provider_data["primary"]
+            if primary:
+                specialty_primary_index = provider_data["specialties"].index(primary)
+                if provider_data["sheaf_vector"][specialty_primary_index] != self.primary_specialty_weight:
+                    provider_data["sheaf_vector"][specialty_primary_index] = self.primary_specialty_weight
+
+        # store node data to pass
+        node_data = {node: {"sheaf_vector":nodes[node]["sheaf_vector"],
+                            "indices":nodes[node]["indices"],
+                            "degree":self.graph.degree(node)}
+                     for node in nodes}
+
+        # store edge data to pass
+        edges = list(self.graph.edges(data=True))
+        edge_data = []
+        for i, (u, v, attr) in enumerate(edges):
+            edge_data.append((
+                i,
+                (u, v),
+                attr,
+                nodes[u]["sheaf_vector"],
+                nodes[u]["indices"],
+                self.graph.degree(u),
+                nodes[v]["sheaf_vector"],
+                nodes[v]["indices"],
+                self.graph.degree(v),
+                self.restriction_weights
+            ))
+
+        results = []
+        with Pool(processes=15) as pool:
+            results_iter = pool.imap_unordered(compute_coboundary_map_multiprocessing_helper, edge_data, chunksize=5000)
+            for result in tqdm(results_iter, total=len(edge_data), file=sys.stdout):
+                results.append(result)
+
+        all_rows = []
+        all_columns = []
+        all_nonzero = []
+        for r, c, nz in results:
+            all_rows.extend(r)
+            all_columns.extend(c)
+            all_nonzero.extend(nz)
+
+        coboundary_map = sp.sparse.csc_matrix((all_nonzero, (all_rows, all_columns)),
+                                              shape=(len(edges), self.coboundary_columns))
+        self.coboundary_map = coboundary_map
+        print(f"coboundary map found in {time.time() - start} with shape {coboundary_map.shape}")
+        return coboundary_map
+
 
     def compute_sheaf_laplacian(self):
         """
@@ -225,7 +319,7 @@ class SheafLaplacian:
             print(f"processing group {g+1} of {len(groups)} with {len(pool_args)} specialties of nodes")
             with Pool(processes=12, initializer=init_worker, initargs=(shared_data_for_pool, )) as pool:
                 # use imap to give iterable to track results with tqdm
-                results_iter = (pool.imap_unordered(compute_centralities_multiprocessing_helper, pool_args, chunksize=128))
+                results_iter = (pool.imap_unordered(compute_centralities_multiprocessing_helper, pool_args, chunksize=500))
                 for result in tqdm(results_iter, total=len(pool_args), file=sys.stdout):
                     results.append(result)
 
@@ -352,7 +446,7 @@ class SheafLaplacian:
         :return:
         """
         print("computing all for ranking...")
-        self.compute_coboundary_map()
+        self.compute_coboundary_map_multiprocessing()
         self.compute_sheaf_laplacian()
         self.compute_centralities_multiprocessing(only_top_specialties)
         ranking = self.get_ranking()

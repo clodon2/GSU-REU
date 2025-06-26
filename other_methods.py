@@ -5,6 +5,7 @@ import scipy as sp
 from multiprocessing import Pool
 from scipy.sparse import csr_matrix
 from math import ceil
+from tqdm import tqdm
 
 
 class EvaluationMethods:
@@ -72,16 +73,17 @@ class EvaluationMethods:
 
         return rankings
 
-    def laplacian_centrality_helper(self, i, node, full_energy, normalized):
+    def laplacian_centrality_helper(self, args):
         """
         performed for each worker, compute centralitiy of each node by "removing" the node from the graph and
-        recomputing the energy and comparing it to the full energy
+        recomputing the energy and comparing it to the full energy; args contains:
         :param i: index of node to remove/get centrality
         :param node: node id
         :param full_energy: energy without anything removed
         :param normalized: normalize centrality to total
         :return:
         """
+        i, node, full_energy, normalized = args
         # remove row and col i from lap_matrix
         all_but_i = list(np.arange(self.laplacian.shape[0]))
         all_but_i.remove(i)
@@ -218,15 +220,17 @@ class EvaluationMethods:
         divisions = ceil(len(nodelist) / group_size)
         groups = [nodelist[i * group_size:(i + 1) * group_size] for i in range(divisions)]
         results = []
-        for group in groups:
+        for g, group in enumerate(groups):
             pool_args = []
             for i, node in enumerate(group):
                 i = nodelist.index(node)
                 pool_args.append((i, node, full_energy, normalized))
 
-            print(f"starting pool...")
-            with Pool(processes=4) as pool:
-                results.extend(pool.starmap(self.laplacian_centrality_helper, pool_args))
+            print(f"starting group {g}... with {len(group)} nodes")
+            with Pool(processes=12) as pool:
+                results_iter = (pool.imap_unordered(self.laplacian_centrality_helper, pool_args, chunksize=100))
+                for result in tqdm(results_iter, total=len(pool_args)):
+                    results.append(result)
 
         print("processing results...")
         for result in results:

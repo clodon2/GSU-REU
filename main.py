@@ -126,14 +126,11 @@ def evaluate_all_methods():
 
     print("page ranking...")
     rankings_pr = ev.page_rank_all_specialties(specialty_names)
-    print("regular laplacian...")
-    rankings_rl = ev.regular_laplacian(specialty_names)
     print("degrees...")
     rankings_dg = ev.degrees(specialty_names)
     print("evaluating...")
 
-    method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"),
-                       (rankings_rl, "RegularLaplacian"), (rankings_dg, "Degrees")]
+    method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"), (rankings_dg, "Degrees")]
     # , (rankings_sir, "SIR")
 
     eval_compare.save_actual_rankings()
@@ -216,7 +213,7 @@ class OptimizeWeights:
 
     def find_best_weights(self):
         start = time.time()
-        DE = DifferentialEvolution(population_size=14, problem_dimensions=4, iterations=40, scaling_factor=.5,
+        DE = DifferentialEvolution(population_size=8, problem_dimensions=4, iterations=20, scaling_factor=.3,
                                    crossover_chance=.7, search_space=[-2, 2], fitness_function=self.get_weight_score)
         results = DE.run()
         end = time.time() - start
@@ -369,7 +366,7 @@ def build_graph_test():
 
 
 if __name__ == "__main__":
-    eval_sheaf_lap()
+    evaluate_all_methods()
     combine_for_graphs(output_write_type="w")
     #get_type_correlation()
     #eval_djalil_centrality_direct()

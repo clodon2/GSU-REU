@@ -68,7 +68,7 @@ class DifferentialEvolution:
         # sort scores for final result
         sorted_pairs = sorted(zip(self.scores, self.population),key=lambda x: x[0], reverse=True)
         # return best vector
-        return sorted_pairs[0]
+        return sorted_pairs[:5]
 
 
 if __name__ == "__main__":

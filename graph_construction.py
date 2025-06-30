@@ -101,7 +101,7 @@ class GraphBuilder:
         print(f"{len(remove_nodes)} no specialty nodes removed")
 
     def build_graph(self, rows=999999999999999999, remove_unscored_nodes_file='',
-                    remove_non_overlap_spec_file=''):
+                    remove_non_overlap_spec_file='', remove_some_nodes:int=0):
         """
         create graph structure for providers and add specialties
         :return: the graph
@@ -115,7 +115,9 @@ class GraphBuilder:
         if remove_non_overlap_spec_file:
             self.remove_non_overlap_specialties(remove_non_overlap_spec_file)
         self.remove_other_connections()
-        self.remove_leaf_nodes(18)
+        self.remove_leaf_nodes()
+        if remove_some_nodes:
+            self.remove_some_nodes(remove_some_nodes)
         self.sheaf_specialty_conversion()
         self.add_provider_totals()
         end = time.time()
@@ -262,15 +264,17 @@ class GraphBuilder:
 
         self.graph.remove_nodes_from(unscored_nodes)
 
-    def remove_small_connections(self):
-        """
-        removes any weakly connected components from the graph
-        :return:
-        """
-        components = list(nx.connected_components(self.graph))
-        for component in components:
-            if len(component) <= (.05 * self.graph.number_of_nodes()):
-                self.graph.remove_nodes_from(component)
+    def remove_some_nodes(self, less_than):
+        print("removing some nodes, goal: ", less_than)
+        node_num = self.graph.number_of_nodes()
+        min_degree = 3
+        while node_num > less_than:
+            remove_nodes = [node for node in self.graph.nodes if self.graph.degree(node) < min_degree]
+            self.graph.remove_nodes_from(remove_nodes)
+            self.remove_other_connections()
+            node_num = self.graph.number_of_nodes()
+            print(f"< {min_degree} degree nodes removed, total: {node_num}")
+            min_degree += 1
 
     def remove_other_connections(self):
         num_nodes = self.graph.number_of_nodes()
@@ -310,7 +314,7 @@ class GraphBuilder:
         self.graph.remove_nodes_from(remove_nodes)
         print(f"removed spec different {len(remove_nodes)} from graph")
 
-    def remove_leaf_nodes(self, iterations=1):
+    def remove_leaf_nodes(self):
         """
         remove nodes on the outer edge of the graph (with degree 1)
         :param iterations: number of times to remove the outer edge nodes

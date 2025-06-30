@@ -5,10 +5,11 @@ def combine_for_graphs(method_files:list[str]=None, output_file:str="./results/a
     print("Combining graph info...")
     mean_title_index = 1
     if method_files is None:
-        method_files = ["./results/resultsSheafLaplacian.csv",
-                        "./results/resultsRegularLaplacian.csv",
-                        "./results/resultsDegrees.csv",
-                        "./results/resultsPageRank.csv"]
+        method_files = ["./results/resultsSheafLaplacianmips.csv",
+                        "./results/resultsSheafLaplacianWhole.csv",
+                        "./results/resultsRegularLaplacianmips.csv",
+                        "./results/resultsDegreesmips.csv",
+                        "./results/resultsPageRankmips.csv"]
     method_means = {}
     for method in method_files:
         with open(method, "r") as method_file:

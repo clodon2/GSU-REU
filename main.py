@@ -9,6 +9,53 @@ from import_from_outside import get_djalil_coboundary, import_djalil_sheaf_lapla
 from dataset_analysis import get_score_correlation
 from combine_comparisons import combine_for_graphs
 import time
+import json
+
+
+def load_in_from_json():
+    with open("removeWholeReserve.json") as file:
+        sorted_rankings = {}
+        rankings = json.load(file)
+        for specialty in rankings:
+            values = rankings[specialty]
+            # reorder to see best provider
+            sorted_rankings[specialty] = sorted(values.items(), key=lambda item: item[1], reverse=True)
+
+        int_rankings = {}
+
+        for specialty in sorted_rankings:
+            converted_scores = []
+            for npi, centrality in sorted_rankings[specialty]:
+                converted_scores.append((int(npi), float(centrality)))
+            int_rankings[specialty] = converted_scores
+
+        sorted_rankings = int_rankings
+
+        graph_builder = GraphBuilder(primary_specialty_weight=1.5)
+        graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv",
+                                          remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
+        sheaf_laplacian = SheafLaplacian(graph,
+                                         graph_builder.coboundary_columns,
+                                         restriction_weights=[1, 1, 1], primary_specialty_weight=1.5)
+        # restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757)
+        eval_compare = CompareData()
+        eval_compare.setup_evaluate()
+        top_specs = eval_compare.get_top_spec_names(100, 10)
+        print(f"passed top specs: {top_specs}")
+        sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings(top_specs)
+        for specialty in top_specs:
+            print(specialty, len(sorted_rankings[specialty]), len(sheaf_laplacian_rankings[specialty]))
+        eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=True,
+                                           save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+        eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
+                                           save_type="append", hits_n=20, ndcg_n=20, top_specialties=10)
+        eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
+                                           save_type="append", hits_n=30, ndcg_n=30, top_specialties=10)
+        eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
+                                           save_type="append", hits_n=40, ndcg_n=40, top_specialties=10)
+        eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
+                                           save_type="append", hits_n=50, ndcg_n=50, top_specialties=10)
+
 
 def eval_spec_number():
     graph_builder = GraphBuilder(primary_specialty_weight=2)
@@ -46,11 +93,12 @@ def eval_sheaf_lap():
                                       remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
     sheaf_laplacian = SheafLaplacian(graph,
                                      graph_builder.coboundary_columns,
-                                     restriction_weights=[1, 1, 1], primary_specialty_weight=1.5)
+                                     restriction_weights=[.92428796, 2, .3785489], primary_specialty_weight=1.777955)
     # restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757)
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
     top_specs = eval_compare.get_top_spec_names(100, 10)
+    print(f"passed top specs: {top_specs}")
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings(top_specs)
     eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
                                        save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
@@ -117,8 +165,9 @@ def evaluate_all_methods():
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
-                                     restriction_weights=[1, 1, 1], primary_specialty_weight=1.5)
-    # restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757
+                                     restriction_weights=[.92428796, 2, .3785489], primary_specialty_weight=1.777955)
+    # [1.777955  , 0.92428796, 2.        , 0.3785489 ]
+
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
 
@@ -155,7 +204,7 @@ def evaluate_all_methods_all_scores():
     # 1, .1, .05
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
-                                     restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757)
+                                     restriction_weights=[.92428796, 2, .3785489], primary_specialty_weight=1.777955)
     # restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
@@ -217,8 +266,8 @@ class OptimizeWeights:
 
     def find_best_weights(self):
         start = time.time()
-        DE = DifferentialEvolution(population_size=12, problem_dimensions=4, iterations=23, scaling_factor=.3,
-                                   crossover_chance=.7, search_space=[-2, 2], fitness_function=self.get_weight_score)
+        DE = DifferentialEvolution(population_size=8, problem_dimensions=4, iterations=20, scaling_factor=.6,
+                                   crossover_chance=.7, search_space=[0, 2], fitness_function=self.get_weight_score)
         results = DE.run()
         end = time.time() - start
         print(f"finished DE algo in {end}")
@@ -370,11 +419,13 @@ def build_graph_test():
 
 
 if __name__ == "__main__":
-    #eval_other_method()
+    #load_in_from_json()
+    eval_sheaf_lap()
+    #evaluate_all_methods_all_scores()
     #get_type_correlation()
     #eval_djalil_centrality_direct()
     #eval_djalil_no_spec_import()
     #evaluate_all_methods()
-    ow = OptimizeWeights()
-    print(ow.find_best_weights())
-    # suggested weights primary: 1.05053757 other: [0.485446858, -1.72720085, 1.51242945]
+    #ow = OptimizeWeights()
+    #print(ow.find_best_weights())
+    # (0.26063333333333333, array([1.777955  , 0.92428796, 2.        , 0.3785489 ])), (0.26063333333333333, array([1.63593104, 0.85589051, 1.85620614, 0.36922718])

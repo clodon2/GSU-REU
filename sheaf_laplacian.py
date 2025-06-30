@@ -6,6 +6,7 @@ from multiprocessing import Pool, shared_memory
 from math import ceil
 from tqdm import tqdm
 import sys
+import json
 
 
 def compute_coboundary_map_multiprocessing_helper(args):
@@ -32,7 +33,7 @@ def compute_coboundary_map_multiprocessing_helper(args):
         restriction = np.array([pair_percentage, bene_total, same_day_total])
 
         # add info to array for sparse matrix conversion
-        restriction_map = node_data[provider]["sheaf_vector"] * np.sum(restriction) * node_data[provider]["degree"] / 50
+        restriction_map = node_data[provider]["sheaf_vector"] * np.sum(restriction) / 20
         # one restriction map is negative
         if num == 1:
             restriction_map *= -1
@@ -57,7 +58,43 @@ def init_worker(shared_data):
         "indptr_shape": shared_data["indptr_shape"]
     }
 
+_shared_coboundary_map = None
+def init_worker_edge(shared_data):
+    global _shared_coboundary_map
+    _shared_coboundary_map = {
+        "data": shared_memory.SharedMemory(name=shared_data["data_name"]),
+        "indices": shared_memory.SharedMemory(name=shared_data["indices_name"]),
+        "indptr": shared_memory.SharedMemory(name=shared_data["indptr_name"]),
+        "shape": shared_data["shape"],
+        "dtype": shared_data["dtype"],
+        "data_shape": shared_data["data_shape"],
+        "indices_shape": shared_data["indices_shape"],
+        "indptr_shape": shared_data["indptr_shape"]
+    }
+
 def create_shared_csc(matrix: sp.sparse.csc_matrix):
+    """convert csc matrix to shared memory for less ram usage and quicker lookup"""
+    shm_data = shared_memory.SharedMemory(create=True, size=matrix.data.nbytes)
+    shm_indices = shared_memory.SharedMemory(create=True, size=matrix.indices.nbytes)
+    shm_indptr = shared_memory.SharedMemory(create=True, size=matrix.indptr.nbytes)
+
+    # copy data
+    np.frombuffer(shm_data.buf, dtype=matrix.data.dtype)[:] = matrix.data
+    np.frombuffer(shm_indices.buf, dtype=matrix.indices.dtype)[:] = matrix.indices
+    np.frombuffer(shm_indptr.buf, dtype=matrix.indptr.dtype)[:] = matrix.indptr
+
+    return {
+        "data": shm_data,
+        "indices": shm_indices,
+        "indptr": shm_indptr,
+        "shape": matrix.shape,
+        "dtype": matrix.data.dtype,
+        "data_shape": matrix.data.shape,
+        "indices_shape": matrix.indices.shape,
+        "indptr_shape": matrix.indptr.shape
+    }
+
+def create_shared_csr(matrix: sp.sparse.csr_matrix):
     """convert csc matrix to shared memory for less ram usage and quicker lookup"""
     shm_data = shared_memory.SharedMemory(create=True, size=matrix.data.nbytes)
     shm_indices = shared_memory.SharedMemory(create=True, size=matrix.indices.nbytes)
@@ -98,6 +135,25 @@ def load_shared_csc(meta):
     )
     return sp.sparse.csc_matrix((data, indices, indptr), shape=meta["shape"])
 
+def load_shared_csr(meta):
+    """reconstruct csc from shared"""
+    data = np.ndarray(
+        shape=meta["data_shape"],
+        dtype=meta["dtype"],
+        buffer=meta["data"].buf
+    )
+    indices = np.ndarray(
+        shape=meta["indices_shape"],
+        dtype=np.int32,
+        buffer=meta["indices"].buf
+    )
+    indptr = np.ndarray(
+        shape=meta["indptr_shape"],
+        dtype=np.int32,
+        buffer=meta["indptr"].buf
+    )
+    return sp.sparse.csr_matrix((data, indices, indptr), shape=meta["shape"])
+
 def compute_centralities_multiprocessing_helper(args):
     """
     each worker performs this function, finds all specialty centralities for a single node
@@ -120,6 +176,31 @@ def compute_centralities_multiprocessing_helper(args):
     centrality = spec_energy / sheaf_laplacian_energy
 
     return node, centrality, specialty
+
+def compute_centralities_multiprocessing_helper_remove_whole(args):
+    """
+    each worker performs this function, finds all specialty centralities for a single node
+    :param args: contains entire sheaf laplacian energy, all column array and node data tuple in order
+    :return: node id, centralities in order same as node specialties
+    """
+    # should be csc
+    sheaf_laplacian_energy, node_data = args
+    global _shared_coboundary_map
+    coboundary = load_shared_csr(_shared_coboundary_map)
+    node, edge_indices, edge_mask, column_indices, column_mask = node_data
+    edge_mask[:] = True
+    edge_mask[edge_indices] = False
+    column_mask[:] = True
+    column_mask[column_indices] = False
+    removed_coboundary = coboundary[edge_mask][:, column_mask]
+
+    sheaf_lap = removed_coboundary.transpose().dot(removed_coboundary)
+
+    spec_energy = np.sum((sheaf_lap.data ** 2))
+    # centrality (impact) for each specialty of each node
+    centrality = (sheaf_laplacian_energy - spec_energy) / sheaf_laplacian_energy
+
+    return node, centrality
 
 
 class SheafLaplacian:
@@ -173,7 +254,7 @@ class SheafLaplacian:
                 restriction = np.array([pair_percentage, bene_total, same_day_total])
 
                 # add info to array for sparse matrix conversion
-                restriction_map = nodes[provider]["sheaf_vector"] * np.sum(restriction) * self.graph.degree(provider) / 50
+                restriction_map = nodes[provider]["sheaf_vector"] * np.sum(restriction) * self.graph.degree(provider, weight="pairs") / 50
                 # one restriction map is negative
                 if num == 1:
                     restriction_map *= -1
@@ -203,12 +284,6 @@ class SheafLaplacian:
                 if provider_data["sheaf_vector"][specialty_primary_index] != self.primary_specialty_weight:
                     provider_data["sheaf_vector"][specialty_primary_index] = self.primary_specialty_weight
 
-        # store node data to pass
-        node_data = {node: {"sheaf_vector":nodes[node]["sheaf_vector"],
-                            "indices":nodes[node]["indices"],
-                            "degree":self.graph.degree(node)}
-                     for node in nodes}
-
         # store edge data to pass
         edges = list(self.graph.edges(data=True))
         edge_data = []
@@ -219,16 +294,16 @@ class SheafLaplacian:
                 attr,
                 nodes[u]["sheaf_vector"],
                 nodes[u]["indices"],
-                self.graph.degree(u),
+                self.graph.degree(u, weight="pairs"),
                 nodes[v]["sheaf_vector"],
                 nodes[v]["indices"],
-                self.graph.degree(v),
+                self.graph.degree(v, weight="pairs"),
                 self.restriction_weights
             ))
 
         results = []
         with Pool(processes=15) as pool:
-            results_iter = pool.imap_unordered(compute_coboundary_map_multiprocessing_helper, edge_data, chunksize=5000)
+            results_iter = pool.imap_unordered(compute_coboundary_map_multiprocessing_helper, edge_data, chunksize=20000)
             for result in tqdm(results_iter, total=len(edge_data), file=sys.stdout):
                 results.append(result)
 
@@ -259,12 +334,13 @@ class SheafLaplacian:
         # multiply by transposition
         sheaf_lap = coboundary_map_t.dot(self.coboundary_map)
 
-        self.sheaf_laplacian = sheaf_lap
+        self.sheaf_laplacian = sheaf_lap.tocsc()
         end = time.time()
 
         print(f"sheaf laplacian done in {end - start}")
+        print(sheaf_lap.shape, self.coboundary_map.shape)
 
-        return sheaf_lap
+        return sheaf_lap.tocsc()
 
     def compute_centralities_multiprocessing(self, only_top_specialties:list=[]):
         """
@@ -277,8 +353,6 @@ class SheafLaplacian:
         self.rankings = {}
         sheaf_laplacian_energy = np.sum(self.sheaf_laplacian.data ** 2)
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
-        # convert coboundary map for column removal later
-        self.coboundary_map = self.coboundary_map.tocsc()
         print("generating pool args")
 
         print("setting up shared memory...")
@@ -319,7 +393,7 @@ class SheafLaplacian:
             print(f"processing group {g+1} of {len(groups)} with {len(pool_args)} specialties of nodes")
             with Pool(processes=12, initializer=init_worker, initargs=(shared_data_for_pool, )) as pool:
                 # use imap to give iterable to track results with tqdm
-                results_iter = (pool.imap_unordered(compute_centralities_multiprocessing_helper, pool_args, chunksize=500))
+                results_iter = pool.imap_unordered(compute_centralities_multiprocessing_helper, pool_args, chunksize=500)
                 for result in tqdm(results_iter, total=len(pool_args), file=sys.stdout):
                     results.append(result)
 
@@ -333,7 +407,7 @@ class SheafLaplacian:
 
         # add results to ranking dict
         for entry in results:
-            node = entry[0]
+            node = int(entry[0])
             centrality = entry[1]
             specialty = entry[2]
             if specialty in self.rankings:
@@ -346,87 +420,94 @@ class SheafLaplacian:
         print(f"energies found in {end - start}")
         return self.rankings
 
-    def compute_centralities_multiprocessing_remove_whole_helper(self, sheaf_laplacian_energy, node, all_col, all_row):
-        """
-        each worker performs this function, finds all specialty centralities for a single node
-        :param sheaf_laplacian_energy: energy of the sheaf laplacian without removing anything
-        :param node: node to get specialty energies for
-        :param i: node number, not needed
-        :return: node id, centralities in order same as node specialties
-        """
-        # should be csr
-        coboundary_csr = self.coboundary_map
-        indices = self.graph.nodes[node]["indices"]
-        edge_indices = self.graph.nodes[node]["edge_indices"]
-        # for each node, get the centrality score
-        include_cols = np.setdiff1d(all_col, indices)
-        include_rows = np.setdiff1d(all_row, edge_indices)
-        sub_coboundary = coboundary_csr[include_rows, :][:, include_cols]
 
-        # sheaf laplacian of coboundary w/ removed
-        sheaf_laplacian = sub_coboundary.transpose().dot(sub_coboundary)
-        node_energy = np.sum(sheaf_laplacian.data ** 2)
-        # centrality (impact) for each specialty of each node
-        centrality = (sheaf_laplacian_energy - node_energy) / sheaf_laplacian_energy
-
-        return node, centrality
-
-    def compute_centralities_multiprocessing_remove_whole(self, only_top_specialties=[]):
+    def compute_centralities_multiprocessing_remove_whole(self, only_top_specialties:list=[]):
         """
-        calculate the centrality of every node by removing the columns and edges
-        :return:
+        calculate the centralities for every specialty of every node by removing the column of the specialty
+        :param only_top_specialties: list of specialties to get node centralities for
+        :return: dict of specialty:ranking list of tuples (node, centrality)
         """
         print("computing sheaf laplacian energy...")
         start = time.time()
+        self.rankings = {}
         sheaf_laplacian_energy = np.sum(self.sheaf_laplacian.data ** 2)
         print(f"sheaf laplacian energy", sheaf_laplacian_energy)
-        # convert coboundary map for column removal later
-        self.coboundary_map = self.coboundary_map.tocsr()
-        all_columns = np.arange(self.coboundary_map.shape[1])
-        all_rows = np.arange(self.coboundary_map.shape[0])
         print("generating pool args")
 
-        # divide up total work into groups to avoid pickling errors with large node number
-        group_size = 50_000
+        print("setting up shared memory...")
+        csr_coboundary = self.coboundary_map.tocsr()
+        shared = create_shared_csr(csr_coboundary)
+
+        # Pass only memory names to pool
+        shared_data_for_pool = {
+            "data_name": shared["data"].name,
+            "indices_name": shared["indices"].name,
+            "indptr_name": shared["indptr"].name,
+            "shape": shared["shape"],
+            "dtype": str(shared["dtype"]),
+            "data_shape": shared["data_shape"],
+            "indices_shape": shared["indices_shape"],
+            "indptr_shape": shared["indptr_shape"]
+        }
+
+        # divide up total work into groups to avoid pickling errors with large node number (deprecated for <500k nodes)
+        group_size = 1_000_000
         divisions = ceil(len(self.graph.nodes) / group_size)
         groups = [list(self.graph.nodes)[i * group_size:(i + 1) * group_size] for i in range(divisions)]
 
+        print(f"setup finished in {time.time() - start}")
         # process groups, centralities
+        print("computing sheaf laplacian centralities")
         results = []
         start = time.time()
-        for group in groups:
-            if only_top_specialties:
-                for node in group:
-                    keep_indices = []
-                    # find indexes of specialties to keep
-                    for i, specialty in enumerate(self.graph.nodes[node]["specialties"]):
-                        if specialty in only_top_specialties:
-                            keep_indices.append(i)
-                    # modify indices and specialties together for consistency
-                    new_specs = []
-                    new_spec_names = []
-                    for index in keep_indices:
-                        new_specs.append(self.graph.nodes[node]["indices"][index])
-                        new_spec_names.append(self.graph.nodes[node]["specialties"][index])
-                    self.graph.nodes[node]["indices"] = new_specs
-                    self.graph.nodes[node]["specialties"] = new_spec_names
+        edge_mask = np.ones(csr_coboundary.shape[0], dtype=bool)
+        column_mask = np.ones(csr_coboundary.shape[1], dtype=bool)
+        for g, group in enumerate(groups):
+            pool_args = []
+            for node in group:
+                # if only need certain specialty centralities, only add those to process list
+                if only_top_specialties:
+                    # check if any specialty from node in top specialties
+                    if any(s in self.graph.nodes[node]["specialties"] for s in only_top_specialties):
+                        edge_indices = self.graph.nodes[node]["edge_indices"]
+                        node_indices = self.graph.nodes[node]['indices']
+                        pool_args.append((sheaf_laplacian_energy, (node, edge_indices, edge_mask, node_indices, column_mask)))
+                else:
+                    edge_indices = self.graph.nodes[node]["edge_indices"]
+                    node_indices = self.graph.nodes[node]['indices']
+                    pool_args.append((sheaf_laplacian_energy, (node, edge_indices, edge_mask, node_indices, column_mask)))
+            print(f"processing group {g+1} of {len(groups)} with {len(pool_args)} nodes")
+            with Pool(processes=12, initializer=init_worker_edge, initargs=(shared_data_for_pool, )) as pool:
+                # use imap to give iterable to track results with tqdm
+                results_iter = pool.imap_unordered(compute_centralities_multiprocessing_helper_remove_whole, pool_args, chunksize=500)
+                for result in tqdm(results_iter, total=len(pool_args), file=sys.stdout):
+                    results.append(result)
 
-            pool_args = [(sheaf_laplacian_energy, node, all_columns, all_rows) for node in group]
-            print("computing sheaf laplacian centralities", groups.index(group))
-            with Pool(processes=10) as pool:
-                results.extend(pool.starmap(self.compute_centralities_multiprocessing_remove_whole_helper, pool_args,
-                                            chunksize=20))
+        print("cleaning shared memory...")
+        shared["data"].close()
+        shared["data"].unlink()
+        shared["indices"].close()
+        shared["indices"].unlink()
+        shared["indptr"].close()
+        shared["indptr"].unlink()
 
+        # add results to ranking dict
         results_by_spec = {}
         for node, score in results:
+            node = int(node)
             for specialty in self.graph.nodes[node]["specialties"]:
                 if specialty in results_by_spec:
-                    results_by_spec[specialty].append((node, score))
+                    results_by_spec[specialty][node] = float(score)
                 else:
-                    results_by_spec[specialty] = [(node, score)]
+                    results_by_spec[specialty] = {}
+                    results_by_spec[specialty][node] = float(score)
+
+        self.rankings = results_by_spec
         end = time.time()
         print(f"energies found in {end - start}")
-        return results_by_spec
+        with open("removeWholeReserve.json", "w") as f:
+            json.dump(self.rankings, f)
+        return self.rankings
 
     def get_ranking(self):
         """
@@ -434,11 +515,14 @@ class SheafLaplacian:
         :return:
         """
         sorted_rankings = {}
-        for specialty in self.rankings:
-            values = self.rankings[specialty]
-            # reorder to see best provider
-            sorted_rankings[specialty] = sorted(values.items(), key=lambda item: item[1], reverse=True)
-        return sorted_rankings
+        try:
+            for specialty in self.rankings:
+                values = self.rankings[specialty]
+                # reorder to see best provider
+                sorted_rankings[specialty] = sorted(values.items(), key=lambda item: item[1], reverse=True)
+            return sorted_rankings
+        except:
+            return self.rankings
 
     def compute_all_give_rankings(self, only_top_specialties=[]):
         """

@@ -113,7 +113,6 @@ class CompareData:
     def setup_evaluate(self, score_index=20):
         """
         setup comparison object for evaluation
-        :param graph: graph to get specialty info from
         :return:
         """
         self.import_provider_ranking(score_index)
@@ -205,7 +204,10 @@ class CompareData:
             output[specialty] = hits_at_n
 
         # calculate mean hits over all specialties
-        mean_hits_at_n = mean_hits_at_n / len(trimmed_rankings.keys())
+        try:
+            mean_hits_at_n = mean_hits_at_n / len(trimmed_rankings.keys())
+        except:
+            mean_hits_at_n = 0
 
         output["mean"] = mean_hits_at_n
 
@@ -259,7 +261,10 @@ class CompareData:
             normalized_discounted_gain = discounted_gain / ideal_discounted_gain
             output[specialty] = normalized_discounted_gain
 
-        output["mean"] = sum(specialty_score[1] for specialty_score in output.items()) / len(trimmed_rankings)
+        try:
+            output["mean"] = sum(specialty_score[1] for specialty_score in output.items()) / len(trimmed_rankings)
+        except:
+            output["mean"] = 0
 
         return output
 
@@ -335,7 +340,7 @@ class CompareData:
         """
         output = {}
 
-        # only get results for top 5 specialties
+        # only get results for top n specialties
         specialty_scores = []
         for specialty in self.provider_specialty_ranking:
             if (specialty in computed_ranking and len(self.provider_specialty_ranking[specialty]) > 2*n and
@@ -485,8 +490,10 @@ class CompareData:
         for n in n_range:
             hits_at_n = self.evaluate_hits(trimmed_rankings_by_specialty, n)
             evaluations.append((hits_at_n, f"hits@{n}"))
+            """
             ndcg_at_n = self.evaluate_NDCG(trimmed_rankings_by_specialty, n)
             evaluations.append((ndcg_at_n, f"NDCG@{n}"))
+            """
 
         for scores in evaluations:
             total_mean += scores[0]["mean"]
@@ -535,11 +542,11 @@ class CompareData:
 
         return extracted_dict
 
-    def get_top_spec_names(self, n, top_spec_num=100):
+    def get_top_spec_names(self, n, top_spec_num=10):
         # only get results for top n specialties
         specialty_scores = []
         for specialty in self.provider_specialty_ranking:
-            if (len(self.provider_specialty_ranking[specialty]) > 2*n):
+            if (len(self.provider_specialty_ranking[specialty]) > n):
                 specialty_scores.append((specialty, len(self.provider_specialty_ranking[specialty])))
 
         specialty_scores = sorted(specialty_scores, key=lambda item: item[1], reverse=True)

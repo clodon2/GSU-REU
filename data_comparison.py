@@ -1,11 +1,11 @@
 import csv
-
 from scipy.stats import spearmanr
 # need for extract
 import numpy as np
 from networkx import Graph
 from random import shuffle
 from math import log2
+
 
 class CompareData:
     def __init__(self, provider_ranking_file:str="./datasets/pa_scores_2017.csv",
@@ -15,6 +15,7 @@ class CompareData:
         object used to compare computed rankings to the ground truth
         :param provider_ranking_file: filename of ground truth dataset
         :param taxonomy_info_file: filename of taxonomy code > actual name dataset
+        :param specialty_info_file: filename of ground truth provider specialties, in reformatted format
         """
         self.provider_ranking_file = provider_ranking_file
         self.taxonomy_info_file = taxonomy_info_file
@@ -26,6 +27,7 @@ class CompareData:
     def import_provider_ranking(self, score_index):
         """
         import ground truth ranking information from dataset file
+        :param score_index: column index of score to give to ground truth npis
         :return:
         """
         with open(self.provider_ranking_file, "r") as rank_file:
@@ -34,12 +36,13 @@ class CompareData:
             providers = {}
             for line in rank_file:
                 provider = line[5].strip()
-                # quality=24, pi=47, ia=75, cost=85, mip=20
+                # possible score indices: quality=24, pi=47, ia=75, cost=85, mips=20
+                # if no score, ignore
                 if (line[score_index].strip() == ''):
                     continue
                 else:
                     score = float(line[score_index].strip())
-                # if duplicate, ignore
+                # if duplicate scores, take highest
                 if provider not in providers:
                     self.provider_ranking.append((int(provider), score))
                     providers[provider] = score
@@ -56,14 +59,15 @@ class CompareData:
             tax_file = csv.reader(tax_file)
             next(tax_file)
             for line in tax_file:
+                # formatted as taxonomy code to the left of the taxonomy name
                 self.taxonomy_info[line[2].strip()] = line[3].strip()
 
     def add_provider_specialties(self):
         """
-        add specialty sorting to imported data
-        :param graph: graph to get specialty information from
+        organize ground truth npis by specialty based on specialty info file
         :return:
         """
+        # map specialties to npis
         specialty_dict = {}
         with open(self.specialty_info_file, "r") as specialty_info:
             spec_info = csv.reader(specialty_info)
@@ -71,10 +75,12 @@ class CompareData:
             for row in spec_info:
                 npi = int(row[0].strip())
                 specialty_dict[npi] = []
+                # specialties stored in columns after npi, where last indicates the primary
                 for sc in row[1:-1]:
                     if sc:
                         specialty_dict[npi].append(sc)
 
+        # create new dictionary organized by specialty
         for entry in self.provider_ranking:
             npi = int(entry[0])
             if npi in specialty_dict:
@@ -84,21 +90,6 @@ class CompareData:
                     else:
                         self.provider_specialty_ranking[specialty] = []
                         self.provider_specialty_ranking[specialty].append(entry)
-
-        """
-        for entry in self.provider_ranking:
-            provider = int(entry[0])
-            score = float(entry[1])
-            if provider in graph.nodes:
-                specialties = graph.nodes[provider]["specialties"]
-                for specialty in specialties:
-                    # if list of nodes with specialty already exists, add to it, if not, create and add
-                    if specialty in self.provider_specialty_ranking:
-                        self.provider_specialty_ranking[specialty].append(entry)
-                    else:
-                        self.provider_specialty_ranking[specialty] = []
-                        self.provider_specialty_ranking[specialty].append(entry)
-        """
 
     def sort_scores(self):
         """
@@ -113,6 +104,7 @@ class CompareData:
     def setup_evaluate(self, score_index=20):
         """
         setup comparison object for evaluation
+        :param score_index: for self.import_provider_ranking, column index of score measure to use
         :return:
         """
         self.import_provider_ranking(score_index)
@@ -122,7 +114,7 @@ class CompareData:
 
     def save_results(self, file:str, row):
         """
-        save data to csv file in ./results/
+        save data to csv file in ./results/ (overwrites)
         :param file: filename to be created
         :param row: row or list of rows to add to file
         :return:
@@ -178,6 +170,7 @@ class CompareData:
             final_computed = trimmed_rankings[specialty]["final_computed"][:n]
             final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])[:n]
 
+            # track what npi have already been counted (ensures duplicates not counted multiple times)
             counted = set()
             # check percentage of correct shared (if correct in computed top n, add to total)
             for i in final_computed:
@@ -189,13 +182,6 @@ class CompareData:
                                 hits_at_n += 1
                             break
 
-            # check if in exact position
-            """
-            for i in range(hits_n):
-                if final_ranked[i][0] == final_computed[i][0]:
-                    hits_at_n += 1
-            """
-
             # calculate percentage of correct in computed
             hits_at_n /= n
             # add to total of percentages for mean calculation later
@@ -203,7 +189,7 @@ class CompareData:
 
             output[specialty] = hits_at_n
 
-        # calculate mean hits over all specialties
+        # calculate mean hits over all specialties, if trimmed empty set as 0
         try:
             mean_hits_at_n = mean_hits_at_n / len(trimmed_rankings.keys())
         except:
@@ -225,10 +211,7 @@ class CompareData:
         for specialty in trimmed_rankings:
             final_computed = trimmed_rankings[specialty]["final_computed"][:n]
             final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])[:n]
-            if not final_ranked or not final_computed:
-                print(specialty, self.provider_specialty_ranking[specialty], trimmed_rankings[specialty])
-
-            # need to create a placing dictionary for distance comparison
+            # create a placing dictionary for distance comparison
             id_to_ideal_positions = {}
             current_pos = 0
             for group in final_ranked:
@@ -248,9 +231,11 @@ class CompareData:
                 else:
                     final_computed_relevancy.append(min(abs(i - p) for p in ideal_positions))
 
+            # calculate ndcg w/ formula and relevancy list
             discounted_gain = 0
             for i, distance in enumerate(final_computed_relevancy):
                 i += 1
+                # add 1 to distance to prevent division by 0
                 discounted_gain += ( 1 / (distance + 1) ) * log2(i + 1)
 
             ideal_discounted_gain = 0
@@ -261,6 +246,7 @@ class CompareData:
             normalized_discounted_gain = discounted_gain / ideal_discounted_gain
             output[specialty] = normalized_discounted_gain
 
+        # calculate mean ndcg over all specialties, if trimmed empty set as 0
         try:
             output["mean"] = sum(specialty_score[1] for specialty_score in output.items()) / len(trimmed_rankings)
         except:
@@ -297,7 +283,7 @@ class CompareData:
                 current_rank += len(group)
 
             # match computed items to ranks
-            shared_ids = list(set(computed_positions) & set(true_positions))
+            shared_ids = sorted(set(computed_positions) & set(true_positions))
 
             computed_ranks = [computed_positions[id] for id in shared_ids]
             true_ranks = [true_positions[id] for id in shared_ids]
@@ -361,7 +347,7 @@ class CompareData:
                     final_computed.append((score[0], computed_ranking_dict[score[0]]))
                     final_ranked.append(score)
 
-            # remove duplicates (move to dict creation probs)
+            # remove duplicates (shouldn't be any, but do just in case)
             duplicate_score_info = {}
             for entry in final_ranked:
                 if entry[0] in duplicate_score_info:
@@ -380,11 +366,12 @@ class CompareData:
             final_ranked = list(dict.fromkeys(averaged_final))
             final_computed = list(dict.fromkeys(final_computed))
 
-            # remove biases, need to check this
+            # remove biases if method gives a lot of the same score
             shuffle(final_computed)
 
-            final_ranked = sorted(final_ranked, key=lambda item: item[1], reverse=True)
-            final_computed = sorted(final_computed, key=lambda item: item[1], reverse=True)
+            # sorts descending based on score, additionally sorts ascending for npi
+            final_ranked = sorted(final_ranked, key=lambda item: (-item[1], item[0]))
+            final_computed = sorted(final_computed, key=lambda item: (-item[1], item[0]))
 
             if final_computed and final_ranked:
                 output[specialty] = {}
@@ -417,14 +404,9 @@ class CompareData:
                 for key in computed_ranking:
                     write.writerow([key, computed_ranking[key]])
 
+        # trim, also removes duplicates
         trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, hits_n, top_specialties)
-        """
-        if title == "Closness":
-            for specialty in trimmed_rankings_by_specialty:
-                print(specialty)
-                for cscore, rscore in zip(trimmed_rankings_by_specialty[specialty]["final_computed"], trimmed_rankings_by_specialty[specialty]["final_ranked"]):
-                    print(cscore, rscore)
-        """
+
         # calculate evaluations
         evaluations = []
         if hits_n:
@@ -445,6 +427,7 @@ class CompareData:
 
         eval = evaluations[0]
         for specialty in eval[0]:
+            # convert code to actual name, if not found just use code
             try:
                 specialty_name = self.taxonomy_info[specialty]
             except:
@@ -457,18 +440,7 @@ class CompareData:
                     pass
             save_info.append(save_row)
 
-        """
-        for eval in evaluations:
-            for specialty in eval[0]:
-                try:
-                    specialty_name = self.taxonomy_info[specialty]
-                except:
-                    specialty_name = specialty
-                save_row = [eval[1], specialty_name, eval[0][specialty]]
-                save_info.append(save_row)
-        """
         if save_type.lower().strip() != "none":
-
             if save_type.lower().strip() == "append":
                 self.append_results(save_file_name, save_info)
             else:
@@ -480,7 +452,7 @@ class CompareData:
         :param computed_ranking: dictionary of specialty : scores
         :param n_range: range to evaluate ns at (hits@n, ndcg at top n)
         :param top_specialties: specialties to consider in comparison, based on most available scores in ground truth
-        :return:
+        :return: mean of all ndcg and hits scores
         """
         trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, 100, top_specialties)
 
@@ -490,10 +462,8 @@ class CompareData:
         for n in n_range:
             hits_at_n = self.evaluate_hits(trimmed_rankings_by_specialty, n)
             evaluations.append((hits_at_n, f"hits@{n}"))
-            """
             ndcg_at_n = self.evaluate_NDCG(trimmed_rankings_by_specialty, n)
             evaluations.append((ndcg_at_n, f"NDCG@{n}"))
-            """
 
         for scores in evaluations:
             total_mean += scores[0]["mean"]
@@ -534,7 +504,7 @@ class CompareData:
                             entry += ")"
                     entry = entry.split(", ")
                     entry[0] = int(entry[0])
-                    # eval to compute into actual number (needed because of numpy flaots)
+                    # eval to compute into actual number (needed because of numpy floats)
                     entry[1] = eval(entry[1])
                     entry = tuple(entry)
                     cleaned_rankings.append(entry)
@@ -543,6 +513,12 @@ class CompareData:
         return extracted_dict
 
     def get_top_spec_names(self, n, top_spec_num=10):
+        """
+        get the most common specialties in the ground truth
+        :param n: number of elements needed to be considered
+        :param top_spec_num: number of top specialties to return
+        :return: list of specialty codes
+        """
         # only get results for top n specialties
         specialty_scores = []
         for specialty in self.provider_specialty_ranking:

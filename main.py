@@ -31,31 +31,67 @@ def load_in_from_json():
 
         sorted_rankings = int_rankings
 
-        graph_builder = GraphBuilder(primary_specialty_weight=1.5)
-        graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv",
-                                          remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
-        sheaf_laplacian = SheafLaplacian(graph,
-                                         graph_builder.coboundary_columns,
-                                         restriction_weights=[1, 1, 1], primary_specialty_weight=1.5)
-        # restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757)
         eval_compare = CompareData()
         eval_compare.setup_evaluate()
-        top_specs = eval_compare.get_top_spec_names(100, 10)
-        print(f"passed top specs: {top_specs}")
-        sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings(top_specs)
-        for specialty in top_specs:
-            print(specialty, len(sorted_rankings[specialty]), len(sheaf_laplacian_rankings[specialty]))
         eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=True,
                                            save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
-        eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
-                                           save_type="append", hits_n=20, ndcg_n=20, top_specialties=10)
-        eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
-                                           save_type="append", hits_n=30, ndcg_n=30, top_specialties=10)
-        eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
-                                           save_type="append", hits_n=40, ndcg_n=40, top_specialties=10)
-        eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
-                                           save_type="append", hits_n=50, ndcg_n=50, top_specialties=10)
+        for i in range(20, 110, 10):
+            eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
+                                               save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
 
+def evaluate_all_methods_whole():
+    with open("removeWholeReserve.json") as file:
+        sorted_rankings = {}
+        rankings = json.load(file)
+        for specialty in rankings:
+            values = rankings[specialty]
+            # reorder to see best provider
+            sorted_rankings[specialty] = sorted(values.items(), key=lambda item: item[1], reverse=True)
+
+        int_rankings = {}
+
+        for specialty in sorted_rankings:
+            converted_scores = []
+            for npi, centrality in sorted_rankings[specialty]:
+                converted_scores.append((int(npi), float(centrality)))
+            int_rankings[specialty] = converted_scores
+
+    sheaf_laplacian_rankings = int_rankings
+
+    graph_builder = GraphBuilder()
+    graph = graph_builder.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv",
+                                      remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
+
+    eval_compare = CompareData()
+    eval_compare.setup_evaluate()
+
+    specialty_names = eval_compare.get_top_spec_names(n=200, top_spec_num=10)
+    # replace this with some other specialty name list
+
+    ev = EvaluationMethods(graph)
+
+    print("page ranking...")
+    rankings_pr = ev.page_rank_all_specialties(specialty_names)
+    print("degrees...")
+    rankings_dg = ev.degrees(specialty_names)
+    print("regular laplacian...")
+    rankings_rl = ev.regular_laplacian(specialty_names)
+    print("evaluating...")
+
+    method_rankings = [(sheaf_laplacian_rankings, "SheafLaplacian"), (rankings_pr, "PageRank"),
+                       (rankings_dg, "Degrees"), (rankings_rl, "RegularLaplacian")]
+    # , (rankings_sir, "SIR")
+
+    eval_compare.save_actual_rankings()
+
+    for method_info in method_rankings:
+        ranking = method_info[0]
+        title = method_info[1]
+        eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=True,
+                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+        for i in range(20, 110, 10):
+            eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
+                                               save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
 
 def eval_spec_number():
     graph_builder = GraphBuilder(primary_specialty_weight=2)
@@ -420,7 +456,8 @@ def build_graph_test():
 
 if __name__ == "__main__":
     #load_in_from_json()
-    eval_sheaf_lap()
+    #eval_sheaf_lap()
+    evaluate_all_methods_whole()
     #evaluate_all_methods_all_scores()
     #get_type_correlation()
     #eval_djalil_centrality_direct()

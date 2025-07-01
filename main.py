@@ -88,10 +88,10 @@ def evaluate_all_methods_whole():
         ranking = method_info[0]
         title = method_info[1]
         eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=True,
-                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+                                       save_type="write", hits_n=10, ndcg_n=10, accuracy_n=10,top_specialties=10)
         for i in range(20, 110, 10):
             eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
-                                               save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
+                                               save_type="append", hits_n=i, ndcg_n=i, accuracy_n=i,top_specialties=10)
 
 def eval_spec_number():
     graph_builder = GraphBuilder(primary_specialty_weight=2)
@@ -160,14 +160,9 @@ def eval_sheaf_lap_remove_whole():
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings_whole_removal(top_specs)
     eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianWhole", save_unfiltered=True,
                                        save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
-                                       save_type="append", hits_n=20, ndcg_n=20, top_specialties=10)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
-                                       save_type="append", hits_n=30, ndcg_n=30, top_specialties=10)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
-                                       save_type="append", hits_n=40, ndcg_n=40, top_specialties=10)
-    eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
-                                       save_type="append", hits_n=50, ndcg_n=50, top_specialties=10)
+    for i in range(20, 110, 10):
+        eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacianWhole", save_unfiltered=False,
+                                           save_type="append", hits_n=i, ndcg_n=i, accuracy_n=i, top_specialties=10)
 
 def eval_degree_results():
     eval_compare = CompareData()
@@ -456,8 +451,8 @@ def build_graph_test():
 
 if __name__ == "__main__":
     #load_in_from_json()
-    #eval_sheaf_lap()
-    evaluate_all_methods_whole()
+    eval_sheaf_lap_remove_whole()
+    #evaluate_all_methods_whole()
     #evaluate_all_methods_all_scores()
     #get_type_correlation()
     #eval_djalil_centrality_direct()

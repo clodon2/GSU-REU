@@ -10,7 +10,7 @@ import json
 
 
 def compute_coboundary_map_multiprocessing_helper(args):
-    i, edge, edge_attributes, u_vec, u_idx, u_deg, v_vec, v_idx, v_deg, restriction_weights = args
+    i, edge, edge_attributes, u_vec, u_idx, u_deg, v_vec, v_idx, v_deg, restriction_weights, max_deg= args
     node_data = {edge[0]: {"sheaf_vector": u_vec,
                            "indices": u_idx,
                            "degree": u_deg},
@@ -28,12 +28,13 @@ def compute_coboundary_map_multiprocessing_helper(args):
     for num, provider in enumerate(edge):
         # get restriction maps based on provider edge percentages
         pair_percentage = restriction_weights[0] * (edge_pairs)
-        bene_total = restriction_weights[1] * (edge_benes)
-        same_day_total = restriction_weights[2] * (edge_same_days)
-        restriction = np.array([pair_percentage, bene_total, same_day_total])
+        bene_percentage = restriction_weights[1] * (edge_benes)
+        same_day_percentage = restriction_weights[2] * (edge_same_days)
+
+        attribute_total = pair_percentage + bene_percentage + same_day_percentage
 
         # add info to array for sparse matrix conversion
-        restriction_map = node_data[provider]["sheaf_vector"] * np.sum(restriction) / 20
+        restriction_map = node_data[provider]["sheaf_vector"] * attribute_total * node_data[provider]["degree"] / max_deg
         # one restriction map is negative
         if num == 1:
             restriction_map *= -1
@@ -223,6 +224,7 @@ class SheafLaplacian:
         :return:
         """
         print("computing coboundary map...")
+        max_degree = max(self.graph.nodes, key=lambda n: self.graph.degree(n))
         start = time.time()
         nonzero_restrictions = []
         nzr_row_indices = []
@@ -249,12 +251,13 @@ class SheafLaplacian:
                     nodes[provider]["edge_indices"].append(i)
                 # get restriction maps based on provider edge percentages
                 pair_percentage = self.restriction_weights[0] * (edge_pairs)
-                bene_total = self.restriction_weights[1] * (edge_benes)
-                same_day_total = self.restriction_weights[2] * (edge_same_days)
-                restriction = np.array([pair_percentage, bene_total, same_day_total])
+                bene_percentage = self.restriction_weights[1] * (edge_benes)
+                same_day_percentage = self.restriction_weights[2] * (edge_same_days)
+
+                attribute_total = pair_percentage + bene_percentage + same_day_percentage
 
                 # add info to array for sparse matrix conversion
-                restriction_map = nodes[provider]["sheaf_vector"] * np.sum(restriction) * self.graph.degree(provider, weight="pairs") / 50
+                restriction_map = nodes[provider]["sheaf_vector"] * attribute_total * self.graph.degree(provider) / max_degree
                 # one restriction map is negative
                 if num == 1:
                     restriction_map *= -1
@@ -287,6 +290,7 @@ class SheafLaplacian:
         # store edge data to pass
         edges = list(self.graph.edges(data=True))
         edge_data = []
+        max_degrees = max(self.graph.nodes, key=lambda n: self.graph.degree(n))
         for i, (u, v, attr) in enumerate(edges):
             edge_data.append((
                 i,
@@ -294,11 +298,12 @@ class SheafLaplacian:
                 attr,
                 nodes[u]["sheaf_vector"],
                 nodes[u]["indices"],
-                self.graph.degree(u, weight="pairs"),
+                self.graph.degree(u),
                 nodes[v]["sheaf_vector"],
                 nodes[v]["indices"],
-                self.graph.degree(v, weight="pairs"),
-                self.restriction_weights
+                self.graph.degree(v),
+                self.restriction_weights,
+                max_degrees
             ))
 
         results = []
@@ -477,7 +482,7 @@ class SheafLaplacian:
                     node_indices = self.graph.nodes[node]['indices']
                     pool_args.append((sheaf_laplacian_energy, (node, edge_indices, edge_mask, node_indices, column_mask)))
             print(f"processing group {g+1} of {len(groups)} with {len(pool_args)} nodes")
-            with Pool(processes=12, initializer=init_worker_edge, initargs=(shared_data_for_pool, )) as pool:
+            with Pool(processes=15, initializer=init_worker_edge, initargs=(shared_data_for_pool, )) as pool:
                 # use imap to give iterable to track results with tqdm
                 results_iter = pool.imap_unordered(compute_centralities_multiprocessing_helper_remove_whole, pool_args, chunksize=500)
                 for result in tqdm(results_iter, total=len(pool_args), file=sys.stdout):

@@ -1,5 +1,5 @@
 import csv
-from scipy.stats import spearmanr
+import scipy as sp
 # need for extract
 import numpy as np
 from networkx import Graph
@@ -153,7 +153,7 @@ class CompareData:
         self.save_results("./results/unfilteredActual.csv", save_info)
 
     def evaluate_hits(self, trimmed_rankings:dict, n=15):
-        f"""
+        """
         evaluate the hits@n for a given ranking
         :param trimmed_rankings: trimmed rankings for each top specialty
         :param n: get the hits within the top n scores
@@ -288,8 +288,87 @@ class CompareData:
             computed_ranks = [computed_positions[id] for id in shared_ids]
             true_ranks = [true_positions[id] for id in shared_ids]
 
-            output[specialty] = spearmanr(true_ranks, computed_ranks).statistic
+            output[specialty] = sp.stats.kendalltau(true_ranks, computed_ranks, variant='b').statistic
 
+        return output
+
+    def evaluate_accuracy(self, trimmed_rankings, n=15):
+        """
+        evaluate the hits@n for a given ranking
+        :param trimmed_rankings: trimmed rankings for each top specialty
+        :param n: get the hits within the top n scores
+        :return: dict of specialties: spec : value_name: values, mean : mean hits
+        """
+        output = {}
+        mean_accuracy = 0
+
+        for specialty in trimmed_rankings:
+            # get trimmed rankings
+            final_computed = trimmed_rankings[specialty]["final_computed"][:n]
+            grouped_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])
+            final_ranked = grouped_ranked[:n]
+
+            # track what npi have already been counted (ensures duplicates not counted multiple times)
+            counted = set()
+            true_positive = 0
+            # check percentage of correct shared (if correct in computed top n, add to total)
+            for i in final_computed:
+                for j in range(len(final_ranked)):
+                    for score in final_ranked[j]:
+                        if i[0] == score[0]:
+                            if i[0] not in counted:
+                                counted.add(i[0])
+                                true_positive += 1
+                            break
+
+            # false negative/positive are identical, so just get incorrect guesses and multiply by 2 for formula
+            incorrect = n - true_positive
+            true_negative = len(grouped_ranked) - n - incorrect
+            # formula = TP + TN / TP + FP + FN + TN
+            accuracy = (true_positive + true_negative) / ((incorrect * 2) + true_negative + true_positive)
+            # add to total of percentages for mean calculation later
+            mean_accuracy += accuracy
+
+            output[specialty] = accuracy
+
+        # calculate mean hits over all specialties, if trimmed empty set as 0
+        try:
+            mean_accuracy = mean_accuracy / len(trimmed_rankings.keys())
+        except:
+            mean_accuracy = 0
+
+        output["mean"] = mean_accuracy
+
+        return output
+
+    def evaluate_RBO(self, trimmed_rankings, n=None, p=.9):
+        if not p:
+            p = 1 - (1 / n)
+        output = {}
+        mean = 0
+        total_scores = 0
+        for specialty in trimmed_rankings:
+            final_computed = trimmed_rankings[specialty]["final_computed"]
+            final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])
+            final_computed = [item[0] for item in final_computed]
+            final_ranked = [[item[0] for item in group] for group in final_ranked]
+            if not n:
+                n = max(len(final_computed), len(final_ranked))
+            S_set, T_set = set(), set()
+            rbo_score = 0.0
+            for d in range(1, n + 1):
+                if d <= len(final_computed):
+                    S_set.add(final_computed[d - 1])
+                if d <= len(final_ranked):
+                    T_set.update(final_ranked[d - 1])
+                current_overlap = len(S_set & T_set) / d
+                rbo_score += (1 - p) * (p ** (d - 1)) * current_overlap
+
+            output[specialty] = rbo_score
+            mean += rbo_score
+            total_scores += 1
+
+        output["mean"] = mean / total_scores
         return output
 
     def groupify_same_scores(self, rank_list):
@@ -382,7 +461,7 @@ class CompareData:
 
 
     def evaluate_all_and_save(self, computed_ranking:dict, title="unknonwn",
-                              save_unfiltered=True, hits_n=15, ndcg_n=15, correlation=True, top_specialties=5,
+                              save_unfiltered=True, hits_n=15, ndcg_n=15, accuracy_n=15, top_specialties=5,
                               save_type="new"):
         """
         evaluate for all evaluation methods (optionally) and save the output
@@ -390,8 +469,8 @@ class CompareData:
         :param title: scoring method name, used for saving
         :param save_unfiltered: if true, save the computed_ranking information to a csv before processing
         :param hits_n: evaluate hits at top n
-        :param ndcg_n: evaluate hits at top n
-        :param correlation: evaluate correlation to ground truth or not
+        :param ndcg_n: evaluate ndcg at top n
+        :param accuracy_n: evaluate accuracy at top n
         :param top_specialties: specialties to consider in comparison, based on most available scores in ground truth
         :param save_type: "new" or "append" or "none" -- how to save data to file
         :return:
@@ -415,9 +494,14 @@ class CompareData:
         if ndcg_n:
             ndcg_at_n = self.evaluate_NDCG(trimmed_rankings_by_specialty, ndcg_n)
             evaluations.append((ndcg_at_n, f"NDCG@{ndcg_n}"))
-        if correlation:
-            correlations = self.evaluate_correlation(trimmed_rankings_by_specialty)
-            evaluations.append((correlations, f"Correlation"))
+        if accuracy_n:
+            accuracies = self.evaluate_accuracy(trimmed_rankings_by_specialty, accuracy_n)
+            evaluations.append((accuracies, f"Accuracy@{accuracy_n}"))
+        correlation = self.evaluate_correlation(trimmed_rankings_by_specialty)
+        evaluations.append((correlation, f"KendallTau"))
+
+        rbo = self.evaluate_RBO(trimmed_rankings_by_specialty, n=hits_n, p=None)
+        evaluations.append((rbo, f"RBO@{hits_n}"))
 
         # save evaluations to file
         save_file_name = f"./results/results{title.strip()}.csv"

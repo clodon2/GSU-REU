@@ -342,6 +342,7 @@ class CompareData:
         return output
 
     def evaluate_RBO(self, trimmed_rankings, n=None, p=.9):
+        # adjust p based on n amount (become more lower-weighted)
         if not p:
             p = 1 - (1 / n)
         output = {}
@@ -350,22 +351,31 @@ class CompareData:
         for specialty in trimmed_rankings:
             final_computed = trimmed_rankings[specialty]["final_computed"]
             final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])
+            # get lists/groups of just npi
             final_computed = [item[0] for item in final_computed]
             final_ranked = [[item[0] for item in group] for group in final_ranked]
+            # if no n just match for max (likely leads to final score 1 for all)
             if not n:
                 n = max(len(final_computed), len(final_ranked))
             S_set, T_set = set(), set()
-            rbo_score = 0.0
+            overlap_ratios = []
+            # get overlap ratio at each depth
             for d in range(1, n + 1):
+                # add npis for set comparison (overlap)
                 if d <= len(final_computed):
                     S_set.add(final_computed[d - 1])
+                # adds group of same scores
                 if d <= len(final_ranked):
                     T_set.update(final_ranked[d - 1])
-                current_overlap = len(S_set & T_set) / d
-                rbo_score += (1 - p) * (p ** (d - 1)) * current_overlap
+                # overlap percentage
+                overlap_ratios.append(len(S_set & T_set) / d)
 
-            output[specialty] = rbo_score
-            mean += rbo_score
+            weighted_sum = sum((1 - p) * (p ** d) * overlap_ratios[d] for d in range(n))
+            # residual allows to max possible score to be 1
+            residual = (p ** n) * sum(overlap_ratios) / n
+            rbo = weighted_sum + residual
+            output[specialty] = rbo
+            mean += rbo
             total_scores += 1
 
         output["mean"] = mean / total_scores
@@ -497,10 +507,8 @@ class CompareData:
         if accuracy_n:
             accuracies = self.evaluate_accuracy(trimmed_rankings_by_specialty, accuracy_n)
             evaluations.append((accuracies, f"Accuracy@{accuracy_n}"))
-        correlation = self.evaluate_correlation(trimmed_rankings_by_specialty)
-        evaluations.append((correlation, f"KendallTau"))
 
-        rbo = self.evaluate_RBO(trimmed_rankings_by_specialty, n=hits_n, p=None)
+        rbo = self.evaluate_RBO(trimmed_rankings_by_specialty, n=hits_n, p=.95)
         evaluations.append((rbo, f"RBO@{hits_n}"))
 
         # save evaluations to file

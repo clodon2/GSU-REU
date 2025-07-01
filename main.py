@@ -451,8 +451,8 @@ def build_graph_test():
 
 if __name__ == "__main__":
     #load_in_from_json()
-    eval_sheaf_lap_remove_whole()
-    #evaluate_all_methods_whole()
+    #eval_sheaf_lap_remove_whole()
+    evaluate_all_methods_whole()
     #evaluate_all_methods_all_scores()
     #get_type_correlation()
     #eval_djalil_centrality_direct()

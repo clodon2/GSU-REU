@@ -10,7 +10,13 @@ import json
 
 
 def compute_coboundary_map_multiprocessing_helper(args):
-    i, edge, edge_attributes, u_vec, u_idx, u_deg, v_vec, v_idx, v_deg, restriction_weights, max_deg= args
+    """
+    helper function for main multiprocessing coboundary map computation, adds individual edge info
+    :param args: see main multiprocessing method, i, edge, edge_attributes, u_vec, u_idx, u_deg, v_vec, v_idx, v_deg,
+    restriction_weights, max_deg
+    :return: csr/csc matrix construction info
+    """
+    i, edge, edge_attributes, u_vec, u_idx, u_deg, v_vec, v_idx, v_deg, restriction_weights, max_deg = args
     node_data = {edge[0]: {"sheaf_vector": u_vec,
                            "indices": u_idx,
                            "degree": u_deg},
@@ -47,6 +53,11 @@ def compute_coboundary_map_multiprocessing_helper(args):
 
 _shared_sheaf_laplacian = None
 def init_worker(shared_data):
+    """
+    worker initialization function for by specialty calculation
+    :param shared_data: dict of data to store in shared memory
+    :return:
+    """
     global _shared_sheaf_laplacian
     _shared_sheaf_laplacian = {
         "data": shared_memory.SharedMemory(name=shared_data["data_name"]),
@@ -61,6 +72,11 @@ def init_worker(shared_data):
 
 _shared_coboundary_map = None
 def init_worker_edge(shared_data):
+    """
+    worker initialization function for by node calculation
+    :param shared_data: dict of data to store in shared memory
+    :return:
+    """
     global _shared_coboundary_map
     _shared_coboundary_map = {
         "data": shared_memory.SharedMemory(name=shared_data["data_name"]),
@@ -74,7 +90,11 @@ def init_worker_edge(shared_data):
     }
 
 def create_shared_csc(matrix: sp.sparse.csc_matrix):
-    """convert csc matrix to shared memory for less ram usage and quicker lookup"""
+    """
+    convert csc matrix to shared memory
+    :param matrix: csc matrix
+    :return: shared memory csc construction dict
+    """
     shm_data = shared_memory.SharedMemory(create=True, size=matrix.data.nbytes)
     shm_indices = shared_memory.SharedMemory(create=True, size=matrix.indices.nbytes)
     shm_indptr = shared_memory.SharedMemory(create=True, size=matrix.indptr.nbytes)
@@ -96,7 +116,11 @@ def create_shared_csc(matrix: sp.sparse.csc_matrix):
     }
 
 def create_shared_csr(matrix: sp.sparse.csr_matrix):
-    """convert csc matrix to shared memory for less ram usage and quicker lookup"""
+    """
+    convert csr matrix to shared memory
+    :param matrix: csr matrix
+    :return: shared memory csr construction dict
+    """
     shm_data = shared_memory.SharedMemory(create=True, size=matrix.data.nbytes)
     shm_indices = shared_memory.SharedMemory(create=True, size=matrix.indices.nbytes)
     shm_indptr = shared_memory.SharedMemory(create=True, size=matrix.indptr.nbytes)
@@ -118,7 +142,11 @@ def create_shared_csr(matrix: sp.sparse.csr_matrix):
     }
 
 def load_shared_csc(meta):
-    """reconstruct csc from shared"""
+    """
+    load csc matrix from shared memory meta data
+    :param meta: shared memory matrix pieces
+    :return: csc matrix
+    """
     data = np.ndarray(
         shape=meta["data_shape"],
         dtype=meta["dtype"],
@@ -137,7 +165,11 @@ def load_shared_csc(meta):
     return sp.sparse.csc_matrix((data, indices, indptr), shape=meta["shape"])
 
 def load_shared_csr(meta):
-    """reconstruct csc from shared"""
+    """
+    load csr matrix from shared memory meta data
+    :param meta: shared memory matrix pieces
+    :return: csr matrix
+    """
     data = np.ndarray(
         shape=meta["data_shape"],
         dtype=meta["dtype"],
@@ -221,7 +253,7 @@ class SheafLaplacian:
     def compute_coboundary_map(self, include_edge_indices=False):
         """
         add coboundary map to each edge, based on each provider's unique restriction map for each edge
-        :return:
+        :return: csc matrix
         """
         print("computing coboundary map...")
         max_degree = max(self.graph.nodes, key=lambda n: self.graph.degree(n))
@@ -276,6 +308,11 @@ class SheafLaplacian:
         return coboundary_map
 
     def compute_coboundary_map_multiprocessing(self, include_edge_indices=False):
+        """
+        add coboundary map to each edge, based on each provider's unique restriction map for each edge
+        :param include_edge_indices: add edge indices as node attribute to graph (needed for whole node sl)
+        :return: csc matrix
+        """
         print("computing coboundary map multiprocessing")
         start = time.time()
         nodes = self.graph.nodes
@@ -330,7 +367,7 @@ class SheafLaplacian:
     def compute_sheaf_laplacian(self):
         """
         compute sheaf laplacian (transposed coboundary map * og coboundary map)
-        :return:
+        :return: csc matrix
         """
         print("computing sheaf laplacian...")
         start = time.time()
@@ -510,14 +547,15 @@ class SheafLaplacian:
         self.rankings = results_by_spec
         end = time.time()
         print(f"energies found in {end - start}")
-        with open("removeWholeReserve.json", "w") as f:
+        # save to json for quick load and in case of errors
+        with open("./results/removeByNodeRankings.json", "w") as f:
             json.dump(self.rankings, f)
         return self.rankings
 
     def get_ranking(self):
         """
         get rankings of providers based on specialties
-        :return:
+        :return: dict of specialty:[(node, centrality)]
         """
         sorted_rankings = {}
         try:
@@ -532,7 +570,11 @@ class SheafLaplacian:
     def compute_all_give_rankings(self, only_top_specialties=[]):
         """
         compute everything needed to get rankings and print them
-        :return:
+        centralities calculated by removing all node specialty columns from coboundary map individually
+        different centrality for every specialty of every node
+        :param only_top_specialties: list of top specialties to calculate centralities for
+        (less centralities to calculate)
+        :return: dict of specialty:[(node, centrality)]
         """
         print("computing all for ranking...")
         self.compute_coboundary_map_multiprocessing()
@@ -545,7 +587,11 @@ class SheafLaplacian:
     def compute_all_give_rankings_whole_removal(self, only_top_specialties=[]):
         """
         compute everything needed to get rankings and print them
-        :return:
+        centralities calculated by removing all node specialty columns and rows (edges) from coboundary map
+        one centrality per node
+        :param only_top_specialties: list of top specialties to calculate centralities for
+        (less centralities to calculate)
+        :return: dict of specialty:[(node, centrality)]
         """
         print("computing all for ranking...")
         self.compute_coboundary_map(include_edge_indices=True)
@@ -554,21 +600,3 @@ class SheafLaplacian:
         ranking = self.get_ranking()
 
         return ranking
-
-    def add_test_data(self):
-        test_edges = [("v1", "v2"), ("v3", "v2"), ("v3", "v4"), ("v1", "v4")]
-
-        test_matrix = [
-            [-1, -2, 1, 0, 0, 0],
-            [0, -2, 3. - 1, 0, 0],
-            [0, 0, 0, 3, -1, 1],
-            [2, 0, 0, 0, -1, 0]
-        ]
-
-        self.coboundary_map = sp.sparse.csr_matrix(([-1, -2, 1, -2, 3, -1, 3, -1, 1, 2, -1],
-                                                    ([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3], [0, 1, 2, 1, 2, 3, 3, 4, 5, 0, 4])),
-                                                   shape=(len(test_matrix), len(test_matrix[0])))
-
-        print(self.coboundary_map)
-
-        self.compute_sheaf_laplacian()

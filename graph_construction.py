@@ -1,5 +1,3 @@
-from idlelib.iomenu import encoding
-
 import networkx as nx
 import time
 import csv
@@ -26,6 +24,50 @@ class GraphBuilder:
         self.graph_data_file = graph_data_file
         self.graph = nx.Graph()
         self.coboundary_columns = 0
+
+    def build_graph(self, rows=999999999999999999, remove_unscored_nodes_file='',
+                    remove_non_overlap_spec_file='', remove_some_nodes:int=0):
+        """
+        create graph structure for providers and add specialties
+        :return: the graph
+        """
+        print("building graph...")
+        start = time.time()
+        self.import_txt_data(rows=rows)
+        if remove_unscored_nodes_file:
+            self.remove_unscored_nodes(remove_unscored_nodes_file)
+        self.add_specialties_fast()
+        if remove_non_overlap_spec_file:
+            self.remove_non_overlap_specialties(remove_non_overlap_spec_file)
+        self.remove_other_connections()
+        self.remove_leaf_nodes()
+        if remove_some_nodes:
+            self.remove_some_nodes(remove_some_nodes)
+        self.sheaf_specialty_conversion()
+        self.add_provider_totals()
+        end = time.time()
+        print(f"graph built in {end - start} with {self.graph.number_of_nodes()} nodes and {self.graph.number_of_edges()} edges")
+        return self.graph
+
+    def get_graph_stats(self):
+        print("Nodes:", self.graph.number_of_nodes())
+        print("Edges:", self.graph.number_of_edges())
+
+    def save_graph(self):
+        """
+        save graph locally as graphml file, expensive
+        :return:
+        """
+        print("writing graph...")
+        nx.write_graphml(self.graph, self.graph_data_file)
+
+    def load_graph(self):
+        """
+        update graph to match graph file
+        :return:
+        """
+        print("importing graph...")
+        self.graph = nx.read_graphml(self.graph_data_file)
 
     def import_txt_data(self, rows:int=500):
         """
@@ -100,50 +142,6 @@ class GraphBuilder:
 
         print(f"{len(remove_nodes)} no specialty nodes removed")
 
-    def build_graph(self, rows=999999999999999999, remove_unscored_nodes_file='',
-                    remove_non_overlap_spec_file='', remove_some_nodes:int=0):
-        """
-        create graph structure for providers and add specialties
-        :return: the graph
-        """
-        print("building graph...")
-        start = time.time()
-        self.import_txt_data(rows=rows)
-        if remove_unscored_nodes_file:
-            self.remove_unscored_nodes_new(remove_unscored_nodes_file)
-        self.add_specialties_fast()
-        if remove_non_overlap_spec_file:
-            self.remove_non_overlap_specialties(remove_non_overlap_spec_file)
-        self.remove_other_connections()
-        self.remove_leaf_nodes()
-        if remove_some_nodes:
-            self.remove_some_nodes(remove_some_nodes)
-        self.sheaf_specialty_conversion()
-        self.add_provider_totals()
-        end = time.time()
-        print(f"graph built in {end - start} with {self.graph.number_of_nodes()} nodes and {self.graph.number_of_edges()} edges")
-        return self.graph
-
-    def get_graph_stats(self):
-        print("Nodes:", self.graph.number_of_nodes())
-        print("Edges:", self.graph.number_of_edges())
-
-    def save_graph(self):
-        """
-        save graph locally as graphml file, expensive
-        :return:
-        """
-        print("writing graph...")
-        nx.write_graphml(self.graph, self.graph_data_file)
-
-    def load_graph(self):
-        """
-        update graph to match graph file
-        :return:
-        """
-        print("importing graph...")
-        self.graph = nx.read_graphml(self.graph_data_file)
-
     def sheaf_specialty_conversion(self):
         """
         add an array to node vertices that stores numerical conversion of specialty list
@@ -197,27 +195,7 @@ class GraphBuilder:
         end = time.time()
         print(f"totals calculated in {end - start}")
 
-    def remove_unscored_nodes(self, score_file_name):
-        """
-        removes nodes that do not have a score in the scoring dataset from the graph
-        :param score_file_name: the score dataset filename
-        :return:
-        """
-        print("removing unscored nodes...")
-        valid_providers = set()
-        with open(score_file_name, "r") as rank_file:
-            rank_file = csv.reader(rank_file)
-            next(rank_file)
-            for line in rank_file:
-                provider = int(line[0].strip())
-                valid_providers.add(provider)
-
-        unscored_nodes = [node for node in self.graph.nodes if node not in valid_providers]
-        print(f"removed {len(unscored_nodes)} no score nodes")
-
-        self.graph.remove_nodes_from(unscored_nodes)
-
-    def remove_unscored_nodes_new(self, score_file_name,
+    def remove_unscored_nodes(self, score_file_name,
                                   score_specialty_file="./datasets/specialty_2018_reformatted.csv"):
         """
         removes nodes that do not have a score in the scoring dataset from the graph
@@ -265,6 +243,11 @@ class GraphBuilder:
         self.graph.remove_nodes_from(unscored_nodes)
 
     def remove_some_nodes(self, less_than):
+        """
+        remove some nodes from the graph, where nodes are removed by lowest degree
+        :param less_than: resulting graph is has less_than nodes or less
+        :return:
+        """
         print("removing some nodes, goal: ", less_than)
         node_num = self.graph.number_of_nodes()
         min_degree = 3
@@ -277,6 +260,10 @@ class GraphBuilder:
             min_degree += 1
 
     def remove_other_connections(self):
+        """
+        remove all graph components other than the main one
+        :return:
+        """
         num_nodes = self.graph.number_of_nodes()
         components = list(nx.connected_components(self.graph))
         for i, component in enumerate(components):
@@ -285,7 +272,12 @@ class GraphBuilder:
 
         print(num_nodes - self.graph.number_of_nodes(), "unconnected nodes removed")
 
-    def remove_non_overlap_specialties(self, specialty_file):
+    def remove_non_overlap_specialties(self, specialty_file:str):
+        """
+        remove specialties that do not overlap with specialty_file, nodes with no specialties removed from graph
+        :param specialty_file: file name of specialty dataset csv to compare graph specialties to
+        :return:
+        """
         print("removing non overlap nodes...")
         specialty_dict = {}
         with open(specialty_file, "r", encoding="utf-8") as actual_specialty_info:

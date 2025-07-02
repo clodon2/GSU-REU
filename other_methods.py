@@ -1,4 +1,4 @@
-from networkx import Graph, pagerank
+from networkx import Graph
 import networkx as nx
 import networkit as nk
 import networkit.centrality
@@ -6,15 +6,18 @@ import numpy as np
 import scipy as sp
 from multiprocessing import Pool, shared_memory
 from scipy.sparse import csr_matrix
-from math import ceil
 from tqdm import tqdm
 from time import time
-from random import random
 import sys
 
 
 _shared_laplacian = None
 def init_worker(shared_data):
+    """
+    initialize workers for laplacian pool
+    :param shared_data: shared memory data
+    :return:
+    """
     global _shared_laplacian
     _shared_laplacian = {
         "data": shared_memory.SharedMemory(name=shared_data["data_name"]),
@@ -30,7 +33,11 @@ def init_worker(shared_data):
     }
 
 def create_shared_csr(matrix: csr_matrix):
-    """Convert a CSR matrix to shared memory for multiprocessing."""
+    """
+    convert a csr matrix to shared memory storage
+    :param matrix: networkx csr matrix
+    :return:
+    """
     shm_data = shared_memory.SharedMemory(create=True, size=matrix.data.nbytes)
     shm_indices = shared_memory.SharedMemory(create=True, size=matrix.indices.nbytes)
     shm_indptr = shared_memory.SharedMemory(create=True, size=matrix.indptr.nbytes)
@@ -54,12 +61,22 @@ def create_shared_csr(matrix: csr_matrix):
     }
 
 def load_shared_csr(meta):
+    """
+    load a csr matrix from shared memory (reconstruct)
+    :param meta: shared memory dict
+    :return: csr matrix
+    """
     data = np.ndarray(shape=meta["data_shape"], dtype=meta["dtype"], buffer=meta["data"].buf)
     indices = np.ndarray(shape=meta["indices_shape"], dtype=meta["indices_dtype"], buffer=meta["indices"].buf)
     indptr = np.ndarray(shape=meta["indptr_shape"], dtype=meta["indptr_dtype"], buffer=meta["indptr"].buf)
     return csr_matrix((data, indices, indptr), shape=meta["shape"])
 
 def laplacian_centrality_helper(args):
+    """
+    multiprocessing function for each task to find laplacian centrality of a node
+    :param args: see pool in main method, node_index, node, full_laplacian_energy, degree, neighbors
+    :return: node, centrality
+    """
     global _shared_laplacian
     laplacian = load_shared_csr(_shared_laplacian)
     node_index, node, full_laplacian_energy, degree, neighbors = args
@@ -109,7 +126,7 @@ class EvaluationMethods:
         """
         start = time()
         ranking = {}
-        centralities = self.attribute_degree_centrality(graph, weight="pairs")
+        centralities = nx.degree_centrality(graph)
         for node in centralities:
             for specialty in graph.nodes[node]["specialties"]:
                 if specialty in ranking:
@@ -188,23 +205,15 @@ class EvaluationMethods:
         print(f"betweenness centralities found in {time() - start}")
         return ranking
 
-    def page_rank(self, graph:Graph, alpha=0.85, personalization=None,
-                  max_iter=100, tol=1e-06, nstart=None, weight='weight',dangling=None):
+    def page_rank(self, graph:Graph):
         """
         get the pagerank centralities for each node in a subgraph
-        :param graph:
-        :param alpha:
-        :param personalization:
-        :param max_iter:
-        :param tol:
-        :param nstart:
-        :param weight:
-        :param dangling:
-        :return:
+        :param graph: networkx graph
+        :return: dict[specialty] = [scores]
         """
         start = time()
         ranking = {}
-        centralities = nx.pagerank(graph, alpha, personalization, max_iter, tol, nstart, weight, dangling)
+        centralities = nx.pagerank(graph)
         for node in centralities:
             for specialty in graph.nodes[node]["specialties"]:
                 if specialty in ranking:
@@ -215,6 +224,12 @@ class EvaluationMethods:
         return ranking
 
     def laplacian_centrality_multiprocessing(self, subgraph:Graph, weight="weight"):
+        """
+        calculate laplacian centralities of a graph
+        :param subgraph: networkx graph
+        :param weight: edge attribute to use as weight in calculation
+        :return:
+        """
         # divide up total work into groups to avoid pickling errors with large node number
         print("calculating centralities for specialty")
         start = time()

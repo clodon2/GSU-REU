@@ -4,52 +4,12 @@ import numpy as np
 import csv
 
 
-def get_score_correlation(graph:Graph, score_file:str="./datasets/pa_scores_2017.csv"):
-    node_scores = {}
-    with open(score_file, "r") as data_file:
-        scores_csv = csv.reader(data_file)
-        next(scores_csv)
-        for line in scores_csv:
-            provider = int(line[5].strip())
-            # quality=24, pi=47, ia=75, cost=85, mip=20
-            if provider in graph.nodes:
-                final = (line[20].strip())
-                quality = (line[24].strip())
-                pi = (line[47].strip())
-                ia = (line[75].strip())
-                cost = (line[85].strip())
-                node_scores[provider] = [final, quality, pi, ia, cost]
-                converted = []
-                for score in node_scores[provider]:
-                    if score:
-                        converted.append(float(score))
-                    else:
-                        converted.append(0)
-                node_scores[provider] = converted
-
-    correlation_dict = {}
-    for i, score_type in enumerate(["mips", "quality", "pi", "ia", "cost"]):
-        correlation_dict[score_type] = [[[], [], []], []]
-        for node in node_scores:
-            p_total = graph.nodes[node]["pair_total"]
-            b_total = graph.nodes[node]["beneficiary_total"]
-            s_total = graph.nodes[node]["same_total"]
-
-            correlation_dict[score_type][0][0].append(p_total)
-            correlation_dict[score_type][0][1].append(b_total)
-            correlation_dict[score_type][0][2].append(s_total)
-
-            correlation_dict[score_type][1].append(node_scores[node][i])
-
-    for score_type in correlation_dict:
-        for total_version, total_type in zip(correlation_dict[score_type][0], ["pair", "bene", "same"]):
-            x = total_version
-            y = correlation_dict[score_type][1]
-            correlation_matrix = np.corrcoef(x, y)
-            correlation_coefficient = correlation_matrix[0, 1]
-            print(f"{score_type} correlation for {total_type}: {correlation_coefficient}")
-
 def row_check(file:str):
+    """
+    check the number of rows in a csv file
+    :param file: csv file to check
+    :return: number of rows
+    """
     rows = 0
     with open(file, "r", encoding="utf-8") as row_file:
         row_reader = csv.reader(row_file)
@@ -58,7 +18,14 @@ def row_check(file:str):
 
     return rows
 
+
 def find_best_graph_specialties(graph:Graph, n=10):
+    """
+    find the most common specialties in the graph
+    :param graph: networkx graph with specialty node attribute
+    :param n: number of specialties to return
+    :return: top n most common specialties in a list
+    """
     spec_nums = {}
     for node in graph:
         for specialty in graph.nodes[node]["specialties"]:
@@ -75,7 +42,15 @@ def find_best_graph_specialties(graph:Graph, n=10):
     # ('367500000X', 9331), ('207X00000X', 8442)]
     return ordered_specs[:n]
 
+
 def get_graph_information(graph:Graph, specialties_to_analyze:list=None, output_file="./results/graph_information.csv"):
+    """
+    get graph statistics
+    :param graph: networkx graph
+    :param specialties_to_analyze: list of specialties to include individually
+    :param output_file: file to write results to, csv
+    :return:
+    """
     nodes = graph.nodes
     node_num = graph.number_of_nodes()
     edge_num = graph.number_of_edges()
@@ -113,7 +88,7 @@ def get_graph_information(graph:Graph, specialties_to_analyze:list=None, output_
             per_specialty[specialty]["mean_degree"] /= per_specialty[specialty]["node_num"]
             per_specialty[specialty]["mean_specialties"] /= per_specialty[specialty]["node_num"]
 
-        with open(output_file, "w") as output:
+        with open(output_file, "w", newline="") as output:
             output_writer = csv.writer(output)
             rows = [["Specialty", "Node Number", "Edge Number", "Avg Degree", "Avg Specialties"],
                     ["Entire Graph", node_num, edge_num, mean_degree, mean_specialties]]
@@ -126,16 +101,11 @@ def get_graph_information(graph:Graph, specialties_to_analyze:list=None, output_
             output_writer.writerows(rows)
 
     else:
-        with open(output_file, "w") as output:
+        with open(output_file, "w", newline="") as output:
             output_writer = csv.writer(output)
             rows = [["Specialty", "Node Number", "Edge Number", "Avg Degree", "Avg Specialties"],
                     ["Entire Graph", node_num, edge_num, mean_degree, mean_specialties]]
 
             output_writer.writerows(rows)
 
-
-
-
-
-if __name__ == "__main__":
-    print(row_check("./datasets/specialty_2018.csv"))
+    print(f"graph statistics saved to {output_file}")

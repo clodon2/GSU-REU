@@ -295,10 +295,10 @@ class CompareData:
 
     def evaluate_accuracy(self, trimmed_rankings, n=15):
         """
-        evaluate the hits@n for a given ranking
+        evaluate the accuracy@n for a given ranking
         :param trimmed_rankings: trimmed rankings for each top specialty
-        :param n: get the hits within the top n scores
-        :return: dict of specialties: spec : value_name: values, mean : mean hits
+        :param n: get the accuracy within the top n scores
+        :return: dict of specialties: spec : value_name: values, mean : mean accuracy
         """
         output = {}
         mean_accuracy = 0
@@ -343,6 +343,13 @@ class CompareData:
         return output
 
     def evaluate_RBO(self, trimmed_rankings, n=None, p=.9):
+        """
+        evaluate results with Rank Biased Overlap
+        :param trimmed_rankings:  trimmed rankings for each top specialty
+        :param n: depth to go down to
+        :param p: 0-1 or None for dynamic, lower = more weight at early depths
+        :return: dict of specialties: spec : value_name: values, mean : mean hits
+        """
         # adjust p based on n amount (become more lower-weighted)
         if not p:
             p = 1 - (1 / n)

@@ -6,6 +6,16 @@ class DifferentialEvolution:
     def __init__(self, population_size:int, problem_dimensions:int, iterations:int,
                  scaling_factor:float, crossover_chance:float, search_space:list[float],
                  fitness_function):
+        """
+        create DE object and set all options
+        :param population_size: number of chromosomes (weights) to have in population MUST BE > problem_dimensions
+        :param problem_dimensions: number of weights to optimize for, determines chromosome length
+        :param iterations: number of iterations to run the algorithm for
+        :param scaling_factor: amount to multiply trial vectors by (higher = more deviation from parents)
+        :param crossover_chance: chance that an offspring weight is included in the new chromosome
+        :param search_space: min-max weights can be
+        :param fitness_function: function that determines how fit a chromosome is
+        """
         self.population_size = population_size
         self.problem_dimensions = problem_dimensions
         self.iterations = iterations
@@ -18,6 +28,10 @@ class DifferentialEvolution:
         self.scores = []
 
     def initialize_population(self):
+        """
+        initialize the population with random chromosomes
+        :return:
+        """
         for i in range(self.population_size):
             chromosome = np.random.uniform(low=self.search_space[0],
                                                      high=self.search_space[1],
@@ -27,6 +41,10 @@ class DifferentialEvolution:
             self.scores.append(score)
 
     def iteration(self):
+        """
+        run one iteration of the algorithm
+        :return:
+        """
         for i, parent_vector in enumerate(self.population):
             print(f"calculating parent {i + 1} of {len(self.population)}")
             target_vector, solutiona, solutionb = sample(self.population, 3)
@@ -57,9 +75,18 @@ class DifferentialEvolution:
                 pass
 
     def get_fitness(self, chromosome):
+        """
+        get the fitness for a chromosome using fitness function
+        :param chromosome: member of population, list of weights
+        :return:
+        """
         return self.fitness_function(chromosome)
 
     def run(self):
+        """
+        run the algorithm based on initialization
+        :return:
+        """
         self.initialize_population()
         for i in range(self.iterations):
             print(f"Running iteration {i + 1} of {self.iterations}")

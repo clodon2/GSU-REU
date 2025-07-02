@@ -76,32 +76,6 @@ def laplacian_centrality_helper(args):
     centrality = (full_laplacian_energy - final_energy) / full_laplacian_energy
     return node, centrality
 
-def SIR_helper(args):
-    node, connected_graph, max_iterations, infection_rate, recovery_rate = args
-    recovered = set()
-    infected = set()
-    infected.add(node)
-    iterations = 0
-    while infected:
-        iterations += 1
-        if iterations > max_iterations:
-            break
-        new_infected = set()
-        for infected_node in infected:
-            neighbors = set(connected_graph.neighbors(infected_node))
-            for susceptible in neighbors.difference(infected).difference(recovered):
-                edge_info = connected_graph[infected_node][susceptible]
-                if random() <= infection_rate:
-                    new_infected.add(susceptible)
-
-            if random() <= recovery_rate:
-                recovered.add(infected_node)
-                infected.remove(infected_node)
-
-        infected.update(new_infected)
-
-    return node, len(infected) + len(recovered)
-
 
 class EvaluationMethods:
     def __init__(self, graph):
@@ -112,7 +86,7 @@ class EvaluationMethods:
         """
         get the centralities for all nodes using graph laplacian
         :param graph: graph
-        :return: dict[specialty][ = [scores]
+        :return: dict[specialty] = [scores]
         """
         start = time()
         ranking = {}
@@ -127,6 +101,12 @@ class EvaluationMethods:
         return ranking
 
     def degree(self, graph:Graph):
+        """
+        get the centralities for all nodes using degree centrality
+        WARNING: lots of identical scorings
+        :param graph: networkx graph
+        :return: dict[specialty] = [scores]
+        """
         start = time()
         ranking = {}
         centralities = self.attribute_degree_centrality(graph, weight="pairs")
@@ -139,31 +119,36 @@ class EvaluationMethods:
         print(f"regular laplacian centralities found in {time() - start}")
         return ranking
 
-    def attribute_degree_centrality(self, G, weight=None):
+    def katz(self, graph:Graph):
         """
-        Compute degree centrality using an edge attribute instead of edge count.
-
-        Parameters:
-        - G: NetworkX graph
-        - weight: str or None, edge attribute to use as weight
-
-        Returns:
-        - dict: node -> centrality value
+        get the centralities for all nodes using katz centrality
+        :param graph: networkx graph
+        :return: dict[specialty] = [scores]
         """
-        centrality = {}
-        norm = 1.0 / (len(G) - 1.0) if len(G) > 1 else 0.0
+        start = time()
+        ranking = {}
+        nk_graph = nk.nxadapter.nx2nk(graph)
+        centrality = nk.centrality.KatzCentrality(nk_graph).run()
+        scores = centrality.scores()
+        node_list = list(graph.nodes())  # index i corresponds to scores[i]
+        centrality_dict = {node_list[i]: scores[i] for i in range(len(scores))}
+        for node in centrality_dict:
+            for specialty in graph.nodes[node]["specialties"]:
+                if specialty in ranking:
+                    ranking[specialty].append((node, centrality_dict[node]))
+                else:
+                    ranking[specialty] = [(node, centrality_dict[node])]
 
-        for node in G:
-            if weight is None:
-                degree = G.degree(node)
-            else:
-                # Sum the attribute values on all incident edges
-                degree = sum(data.get(weight, 0.0) for _, _, data in G.edges(node, data=True))
-            centrality[node] = degree * norm
-
-        return centrality
+        print(f"katz centralities found in {time() - start}")
+        return ranking
 
     def closeness(self, graph:Graph):
+        """
+        get the centralities for all nodes using closeness centrality
+        WARNING: computationally expensive, takes ~5x regular laplacian time
+        :param graph: networkx graph
+        :return: dict[specialty] = [scores]
+        """
         start = time()
         ranking = {}
         nk_graph = nk.nxadapter.nx2nk(graph)
@@ -181,10 +166,16 @@ class EvaluationMethods:
         return ranking
 
     def betweenness(self, graph:Graph):
+        """
+        get the centralities for all nodes using betweenness centrality
+        WARNING: very computationally expensive, likely greater than 8 hours to finish
+        :param graph: networkx graph
+        :return: dict[specialty] = [scores]
+        """
         start = time()
         ranking = {}
         nk_graph = nk.nxadapter.nx2nk(graph)
-        centrality = nk.centrality.Betweenness(nk_graph, True, False).run()
+        centrality = nk.centrality.ApproxBetweenness(nk_graph).run()
         scores = centrality.scores()
         node_list = list(graph.nodes())  # index i corresponds to scores[i]
         score_dict = {node_list[i]: scores[i] for i in range(len(scores))}
@@ -222,30 +213,6 @@ class EvaluationMethods:
                     ranking[specialty] = [(node, centralities[node])]
         print(f"page rank centralities found in {time() - start}")
         return ranking
-
-    def SIR(self, graph:Graph, iterations:int, infection_rate=.6, recovery_rate=.5):
-        nodes = graph.nodes
-        task_list = []
-        for node in nodes:
-            all_connected_neighbors = list(nx.single_source_shortest_path_length(graph, node, cutoff=iterations).keys()).append(node)
-            node_subgraph = graph.subgraph(all_connected_neighbors)
-            task_list.append((node, node_subgraph, iterations, infection_rate, recovery_rate))
-
-        results = []
-        with Pool(processes=15) as pool:
-            results_iter = pool.imap_unordered(SIR_helper, task_list, chunksize=1)
-            for result in tqdm(results_iter, total=len(task_list), file=sys.stdout):
-                results.append(result)
-
-        output = {}
-        for node, score in results:
-            for specialty in nodes[node]["specialties"]:
-                if specialty in output:
-                    output[specialty].append((node, score))
-                else:
-                    output[specialty] = [(node, score)]
-
-        return output
 
     def laplacian_centrality_multiprocessing(self, subgraph:Graph, weight="weight"):
         # divide up total work into groups to avoid pickling errors with large node number

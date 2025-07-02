@@ -129,11 +129,11 @@ def eval_other_method():
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
     em = EvaluationMethods(graph)
-    method_rank = em.betweenness(graph)
-    eval_compare.evaluate_all_and_save(method_rank, title="Betweenness", save_unfiltered=True,
+    method_rank = em.katz(graph)
+    eval_compare.evaluate_all_and_save(method_rank, title="Katz", save_unfiltered=True,
                                        save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
     for i in range(20, 110, 10):
-        eval_compare.evaluate_all_and_save(method_rank, title="Betweenness", save_unfiltered=False,
+        eval_compare.evaluate_all_and_save(method_rank, title="Katz", save_unfiltered=False,
                                            save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
 
 
@@ -312,12 +312,7 @@ if __name__ == "__main__":
     #eval_sheaf_lap_remove_whole()
     #evaluate_all_methods_whole()
     #evaluate_all_other_methods()
-    #eval_other_method()
-    gb = GraphBuilder()
-    graph = gb.build_graph(remove_unscored_nodes_file="./datasets/pa_scores_2017.csv",
-                           remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
-    get_graph_information(graph, ['207R00000X', '207Q00000X', '363LF0000X', '363A00000X', '207P00000X', '367500000X', '207L00000X', '2085R0202X', '390200000X', '363L00000X'])
-    #best_spec_graph()
+    eval_other_method()
     #evaluate_all_methods_all_scores()
     #get_type_correlation()
     #evaluate_all_methods()

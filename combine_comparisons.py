@@ -7,7 +7,7 @@ def combine_for_graphs(method_files:list[str]=None, output_file:str="./results/a
     if method_files is None:
         method_files = ["./results/resultsSheafLaplacian.csv",
                         "./results/resultsRegularLaplacianNew.csv",
-                        "./results/resultsDegreesNew.csv",
+                        "./results/resultsKatz.csv",
                         "./results/resultsPageRankNew.csv"]
     method_means = {}
     for method in method_files:

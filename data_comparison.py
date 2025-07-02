@@ -163,27 +163,28 @@ class CompareData:
         mean_hits_at_n = 0
 
         for specialty in trimmed_rankings:
-            # calculate hits@n
-            hits_at_n = 0
 
             # get trimmed rankings
-            final_computed = trimmed_rankings[specialty]["final_computed"][:n]
+            final_computed = self.groupify_same_scores(trimmed_rankings[specialty]["final_computed"])[:n]
             final_ranked = self.groupify_same_scores(trimmed_rankings[specialty]["final_ranked"])[:n]
+            final_computed = [{item[0] for item in group} for group in final_computed]
+            final_ranked = [{item[0] for item in group} for group in final_ranked]
 
-            # track what npi have already been counted (ensures duplicates not counted multiple times)
-            counted = set()
-            # check percentage of correct shared (if correct in computed top n, add to total)
-            for i in final_computed:
-                for j in range(len(final_ranked)):
-                    for score in final_ranked[j]:
-                        if i[0] == score[0]:
-                            if i[0] not in counted:
-                                counted.add(i[0])
-                                hits_at_n += 1
-                            break
+            print(n, len(final_computed), len(final_ranked), end=" ")
+            for group in final_computed:
+                print(len(group), end=" ")
+
+            print("")
+
+            hits = 0
+            for group_set in final_computed:
+                for gt_set in final_ranked:
+                    if any(group_set & gt_set):
+                        hits += 1
+                        break
 
             # calculate percentage of correct in computed
-            hits_at_n /= n
+            hits_at_n = hits / n
             # add to total of percentages for mean calculation later
             mean_hits_at_n += hits_at_n
 
@@ -621,3 +622,20 @@ class CompareData:
         specialty_scores = specialty_scores[:top_spec_num]
         top_specialties_names = [specialty_info[0] for specialty_info in specialty_scores]
         return top_specialties_names
+
+    def get_top_specs(self, n, top_spec_num=10):
+        """
+        get the most common specialties in the ground truth
+        :param n: number of elements needed to be considered
+        :param top_spec_num: number of top specialties to return
+        :return: list of specialty codes
+        """
+        # only get results for top n specialties
+        specialty_scores = []
+        for specialty in self.provider_specialty_ranking:
+            if (len(self.provider_specialty_ranking[specialty]) > n):
+                specialty_scores.append((specialty, len(self.provider_specialty_ranking[specialty])))
+
+        specialty_scores = sorted(specialty_scores, key=lambda item: item[1], reverse=True)
+        specialty_scores = specialty_scores[:top_spec_num]
+        return specialty_scores

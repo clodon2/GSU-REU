@@ -1,5 +1,7 @@
 from networkx import Graph, pagerank
 import networkx as nx
+import networkit as nk
+import networkit.centrality
 import numpy as np
 import scipy as sp
 from multiprocessing import Pool, shared_memory
@@ -7,6 +9,7 @@ from scipy.sparse import csr_matrix
 from math import ceil
 from tqdm import tqdm
 from time import time
+from random import random
 import sys
 
 
@@ -73,29 +76,132 @@ def laplacian_centrality_helper(args):
     centrality = (full_laplacian_energy - final_energy) / full_laplacian_energy
     return node, centrality
 
+def SIR_helper(args):
+    node, connected_graph, max_iterations, infection_rate, recovery_rate = args
+    recovered = set()
+    infected = set()
+    infected.add(node)
+    iterations = 0
+    while infected:
+        iterations += 1
+        if iterations > max_iterations:
+            break
+        new_infected = set()
+        for infected_node in infected:
+            neighbors = set(connected_graph.neighbors(infected_node))
+            for susceptible in neighbors.difference(infected).difference(recovered):
+                edge_info = connected_graph[infected_node][susceptible]
+                if random() <= infection_rate:
+                    new_infected.add(susceptible)
+
+            if random() <= recovery_rate:
+                recovered.add(infected_node)
+                infected.remove(infected_node)
+
+        infected.update(new_infected)
+
+    return node, len(infected) + len(recovered)
+
+
 class EvaluationMethods:
     def __init__(self, graph):
         self.graph = graph
         self.laplacian = None
 
-    def subgraph_given_specialty(self, specialty):
+    def regular_laplacian(self, graph:Graph):
         """
-        get a subgraph of a graph including nodes with the same specialty
-        :param specialty:
-        :return:
+        get the centralities for all nodes using graph laplacian
+        :param graph: graph
+        :return: dict[specialty][ = [scores]
         """
-        nodes_of_interest = []
-        for node in self.graph.nodes():
-            if specialty in self.graph.nodes[node]["specialties"]:
-                nodes_of_interest.append(node)
-        subgraph = self.graph.subgraph(nodes_of_interest)
-        return subgraph
+        start = time()
+        ranking = {}
+        centralities = self.laplacian_centrality_multiprocessing(graph)
+        for node in centralities:
+            for specialty in graph.nodes[node]["specialties"]:
+                if specialty in ranking:
+                    ranking[specialty].append((node, centralities[node]))
+                else:
+                    ranking[specialty] = [(node, centralities[node])]
+        print(f"regular laplacian centralities found in {time() - start}")
+        return ranking
 
-    def page_rank(self, subgraph:Graph, alpha=0.85, personalization=None,
+    def degree(self, graph:Graph):
+        start = time()
+        ranking = {}
+        centralities = self.attribute_degree_centrality(graph, weight="pairs")
+        for node in centralities:
+            for specialty in graph.nodes[node]["specialties"]:
+                if specialty in ranking:
+                    ranking[specialty].append((node, centralities[node]))
+                else:
+                    ranking[specialty] = [(node, centralities[node])]
+        print(f"regular laplacian centralities found in {time() - start}")
+        return ranking
+
+    def attribute_degree_centrality(self, G, weight=None):
+        """
+        Compute degree centrality using an edge attribute instead of edge count.
+
+        Parameters:
+        - G: NetworkX graph
+        - weight: str or None, edge attribute to use as weight
+
+        Returns:
+        - dict: node -> centrality value
+        """
+        centrality = {}
+        norm = 1.0 / (len(G) - 1.0) if len(G) > 1 else 0.0
+
+        for node in G:
+            if weight is None:
+                degree = G.degree(node)
+            else:
+                # Sum the attribute values on all incident edges
+                degree = sum(data.get(weight, 0.0) for _, _, data in G.edges(node, data=True))
+            centrality[node] = degree * norm
+
+        return centrality
+
+    def closeness(self, graph:Graph):
+        start = time()
+        ranking = {}
+        nk_graph = nk.nxadapter.nx2nk(graph)
+        centrality = nk.centrality.Closeness(nk_graph, True, False).run()
+        scores = centrality.scores()
+        node_list = list(graph.nodes())  # index i corresponds to scores[i]
+        closeness_dict = {node_list[i]: scores[i] for i in range(len(scores))}
+        for node in closeness_dict:
+            for specialty in graph.nodes[node]["specialties"]:
+                if specialty in ranking:
+                    ranking[specialty].append((node, closeness_dict[node]))
+                else:
+                    ranking[specialty] = [(node, closeness_dict[node])]
+        print(f"closeness centralities found in {time() - start}")
+        return ranking
+
+    def betweenness(self, graph:Graph):
+        start = time()
+        ranking = {}
+        nk_graph = nk.nxadapter.nx2nk(graph)
+        centrality = nk.centrality.Betweenness(nk_graph, True, False).run()
+        scores = centrality.scores()
+        node_list = list(graph.nodes())  # index i corresponds to scores[i]
+        score_dict = {node_list[i]: scores[i] for i in range(len(scores))}
+        for node in score_dict:
+            for specialty in graph.nodes[node]["specialties"]:
+                if specialty in ranking:
+                    ranking[specialty].append((node, score_dict[node]))
+                else:
+                    ranking[specialty] = [(node, score_dict[node])]
+        print(f"betweenness centralities found in {time() - start}")
+        return ranking
+
+    def page_rank(self, graph:Graph, alpha=0.85, personalization=None,
                   max_iter=100, tol=1e-06, nstart=None, weight='weight',dangling=None):
         """
         get the pagerank centralities for each node in a subgraph
-        :param subgraph:
+        :param graph:
         :param alpha:
         :param personalization:
         :param max_iter:
@@ -105,38 +211,41 @@ class EvaluationMethods:
         :param dangling:
         :return:
         """
-        page_rank_scores = nx.pagerank(subgraph, alpha, personalization,
-                                            max_iter, tol, nstart, weight, dangling)
-        # Print the results
-        """
-        print("PageRank Scores(with edge weights):")
-        for node, score in self.page_rank_scores.items():
-            print(f"Node{node}: {score}")
-        """
+        start = time()
+        ranking = {}
+        centralities = nx.pagerank(graph, alpha, personalization, max_iter, tol, nstart, weight, dangling)
+        for node in centralities:
+            for specialty in graph.nodes[node]["specialties"]:
+                if specialty in ranking:
+                    ranking[specialty].append((node, centralities[node]))
+                else:
+                    ranking[specialty] = [(node, centralities[node])]
+        print(f"page rank centralities found in {time() - start}")
+        return ranking
 
-        return page_rank_scores
+    def SIR(self, graph:Graph, iterations:int, infection_rate=.6, recovery_rate=.5):
+        nodes = graph.nodes
+        task_list = []
+        for node in nodes:
+            all_connected_neighbors = list(nx.single_source_shortest_path_length(graph, node, cutoff=iterations).keys()).append(node)
+            node_subgraph = graph.subgraph(all_connected_neighbors)
+            task_list.append((node, node_subgraph, iterations, infection_rate, recovery_rate))
 
-    def page_rank_all_specialties(self, specialties:list, alpha=0.85, personalization=None,
-                  max_iter=100, tol=1e-06, nstart=None, weight='weight',dangling=None):
-        """
-        pagerank all nodesof all specialties
-        :param specialties:
-        :param alpha:
-        :param personalization:
-        :param max_iter:
-        :param tol:
-        :param nstart:
-        :param weight:
-        :param dangling:
-        :return:
-        """
-        rankings = {}
-        for specialty in specialties:
-            spec_subgraph = self.subgraph_given_specialty(specialty)
-            spec_pr = pagerank(spec_subgraph, alpha, personalization, max_iter, tol,nstart, weight, dangling)
-            rankings[specialty] = spec_pr.items()
+        results = []
+        with Pool(processes=15) as pool:
+            results_iter = pool.imap_unordered(SIR_helper, task_list, chunksize=1)
+            for result in tqdm(results_iter, total=len(task_list), file=sys.stdout):
+                results.append(result)
 
-        return rankings
+        output = {}
+        for node, score in results:
+            for specialty in nodes[node]["specialties"]:
+                if specialty in output:
+                    output[specialty].append((node, score))
+                else:
+                    output[specialty] = [(node, score)]
+
+        return output
 
     def laplacian_centrality_multiprocessing(self, subgraph:Graph, weight="weight"):
         # divide up total work into groups to avoid pickling errors with large node number
@@ -174,7 +283,7 @@ class EvaluationMethods:
         print(f"setup finished in {time() - setup_time_start}")
 
         results = []
-        with Pool(processes=6, initializer=init_worker, initargs=(shared_data_for_pool,)) as pool:
+        with Pool(processes=15, initializer=init_worker, initargs=(shared_data_for_pool,)) as pool:
             results_iter = pool.imap_unordered(laplacian_centrality_helper, pool_args, chunksize=1)
             for result in tqdm(results_iter, total=len(pool_args), file=sys.stdout):
                 results.append(result)
@@ -195,164 +304,3 @@ class EvaluationMethods:
 
         print(f"one regular laplacian specialty centrality set done in {time() - start}")
         return laplacian_centralities
-
-    def regular_laplacian(self, specialties:list):
-        """
-        get the centralities for all nodes using graph laplacian
-        :param specialties: list of specialty names to subgraph and find centralities
-        :return: dict[specialty][ = [scores]
-        """
-        start = time()
-        ranking = {}
-        for s, specialty in enumerate(specialties):
-            print(f"specialty {s}")
-            centralities = self.laplacian_centrality_multiprocessing(self.subgraph_given_specialty(specialty))
-            ranking[specialty] = list(centralities.items())
-        print(f"regular laplacian centralities found in {time() - start}")
-        return ranking
-
-    def betweenness(self):
-        """
-        get betweenness centralities for each node in graph
-        :return: dict[specialty][ = [scores]
-        """
-        ranking = {}
-        centralities = nx.betweenness_centrality(self.graph)
-        for node in centralities:
-            centrality = centralities[node]
-            # add to rankings for specialty
-            for specialty_name in self.graph.nodes[node]["specialties"]:
-                if specialty_name in ranking:
-                    ranking[specialty_name][node] = centrality
-                else:
-                    ranking[specialty_name] = {}
-                    ranking[specialty_name][node] = centrality
-
-        for specialty in ranking:
-            ranking[specialty] = list(ranking[specialty].items())
-
-        return ranking
-
-    def degrees(self, specialties:list):
-        ranking = {}
-        for specialty in specialties:
-            centralities = nx.degree_centrality(self.subgraph_given_specialty(specialty))
-            ranking[specialty] = list(centralities.items())
-
-        return ranking
-
-    def closeness(self):
-        """
-        get closeness centralities for each node in graph
-        :return: dict[specialty][ = [scores]
-        """
-        ranking = {}
-        centralities = nx.closeness_centrality(self.graph)
-        for node in centralities:
-            centrality = centralities[node]
-            # add to rankings for specialty
-            for specialty_name in self.graph.nodes[node]["specialties"]:
-                if specialty_name in ranking:
-                    ranking[specialty_name][node] = centrality
-                else:
-                    ranking[specialty_name] = {}
-                    ranking[specialty_name][node] = centrality
-
-        for specialty in ranking:
-            ranking[specialty] = list(ranking[specialty].items())
-
-        return ranking
-
-    def load_centrality(self):
-        """
-        get load centralities for each node in graph
-        :return: dict[specialty][ = [scores]
-        """
-        ranking = {}
-        centralities = nx.load_centrality(self.graph)
-        for node in centralities:
-            centrality = centralities[node]
-            # add to rankings for specialty
-            for specialty_name in self.graph.nodes[node]["specialties"]:
-                if specialty_name in ranking:
-                    ranking[specialty_name][node] = centrality
-                else:
-                    ranking[specialty_name] = {}
-                    ranking[specialty_name][node] = centrality
-
-        for specialty in ranking:
-            ranking[specialty] = list(ranking[specialty].items())
-
-        return ranking
-
-    def SIR_math(self, specialties:list):
-        for specialty in specialties:
-            total_population = [n for n, attr in self.graph.nodes(data=True) if attr.get('specialty') == specialty]
-            # for all nodes in the specialty, calculate sir value
-            # number of infected = S/N * p * k * D
-            # S=susceptible N=total p=infectionChance k=contacts D=daysInfected I=infected y=recoveryRate=1/D
-            # ds/dt=-(p*k*S*I)/N  di/dt=((p*k*S*I)/N)-yI  dr/dt=yI
-            # ds/dt=susceptibleChange di/dt=infectedChange dr/dt=recoveredChange
-            for node in total_population:
-                pass
-
-    def SIR_vectors(self, specialties:list, iterations=50):
-        ranking = {}
-        for specialty in specialties:
-            specialty_nodes = [n for n, attr in self.graph.nodes(data=True) if specialty in attr.get('specialties')]
-
-            for node_number, node in enumerate(specialty_nodes):
-                print(f"{node_number} of {len(specialty_nodes)}")
-                node_id = node
-                population = nx.node_connected_component(self.graph, node_id)
-
-                # population subgraph
-                population_graph = self.graph.subgraph(population).copy()
-
-                adjacency = nx.to_scipy_sparse_array(population_graph)
-
-                # Get the nodes in population_graph
-                population_nodes = list(population_graph.nodes)
-                node_to_idx = {node: idx for idx, node in enumerate(population_nodes)}
-                N = len(population_nodes)
-
-                # Initialize states array for this subgraph
-                states = np.zeros(N, dtype=np.int8)
-                states[node_to_idx[node_id]] = 1
-                infection_history = [states.copy()]
-
-                infection_probability_mx = sp.sparse.dok_matrix((N, N))
-
-                for u, v, data in population_graph.edges(data=True):
-                    i = node_to_idx[u]
-                    j = node_to_idx[v]
-                    infection_prob = data.get("weight", 0.2)
-                    infection_probability_mx[i, j] = infection_prob
-                    infection_probability_mx[j, i] = infection_prob
-
-                for time in range(iterations):
-                    infected = (states == 1).astype(np.float32)
-
-                    infected_prob = adjacency @ infected
-
-                    susceptible = (states == 0)
-
-                    rand_vals = np.random.rand(N)
-
-                    infected_neighbors = (rand_vals < infected_prob) & susceptible
-
-                    states[infected_neighbors] = 1
-
-                centrality = len((states == 1).astype(np.float32))
-                # add to rankings for specialty
-                for specialty_name in self.graph.nodes[node_id]["specialties"]:
-                    if specialty_name in ranking:
-                        ranking[specialty_name][node] = centrality
-                    else:
-                        ranking[specialty_name] = {}
-                        ranking[specialty_name][node] = centrality
-
-        for specialty in ranking:
-            ranking[specialty] = list(ranking[specialty].items())
-
-        return ranking

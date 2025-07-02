@@ -1,0 +1,23 @@
+Specialty,Node Number,Edge Number,Avg Degree,Avg Specialties
+,,,,
+Entire Graph,281463,4343490,30.86366592,1.222260119
+,,,,
+Allopathic & Osteopathic Physicians/Internal Medicine,44657,1395961,34.95064604,1.447701368
+,,,,
+Allopathic & Osteopathic Physicians/Family Medicine,31036,480106,16.66071659,1.135520041
+,,,,
+"Physician Assistants & Advanced Practice Nursing Providers/Nurse Practitioner, Family",10303,108355,10.70484325,1.16771814
+,,,,
+Physician Assistants & Advanced Practice Nursing Providers/Physician Assistant,11946,124159,10.56052235,1.152184832
+,,,,
+Allopathic & Osteopathic Physicians/Emergency Medicine,13557,421302,32.43977281,1.256103858
+,,,,
+"Physician Assistants & Advanced Practice Nursing Providers/Nurse Anesthetist, Certified Registered",9331,76162,8.206730254,1.096559854
+,,,,
+"Allopathic & Osteopathic Physicians/Anesthesiology, Addiction Medicine",7944,143848,18.4699144,1.304003021
+,,,,
+"Allopathic & Osteopathic Physicians/Radiology, Diagnostic Radiology",10374,1389517,144.6456526,1.407942934
+,,,,
+Student in an Organized Health Care Education/Training Program,6575,215558,33.51239544,1.996501901
+,,,,
+Physician Assistants & Advanced Practice Nursing Providers/Nurse Practitioner,7580,95990,12.83443272,1.258047493

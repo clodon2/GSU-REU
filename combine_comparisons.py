@@ -41,13 +41,11 @@ def combine_for_graphs(method_files:list[str]=None, output_file:str="./results/a
         hits_rows[0].append(f"{i}")
         ndcg_rows[0].append(f"{i}")
         rbo_rows[0].append(f"{i}")
-    print(method_means)
     for method in method_means:
         hit_row = [method]
         ndcg_row = [method]
         rbo_row = [method]
         for hit, ndcg, rbo in method_means[method]:
-            print(hit, ndcg, method)
             hit_row.append(hit)
             ndcg_row.append(ndcg)
             rbo_row.append(rbo)

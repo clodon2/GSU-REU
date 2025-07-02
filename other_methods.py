@@ -284,5 +284,5 @@ class EvaluationMethods:
             lapl_cent = result[1]
             laplacian_centralities[node] = float(lapl_cent)
 
-        print(f"one regular laplacian specialty centrality set done in {time() - start}")
+        print(f"regular laplacian centralities done in {time() - start}")
         return laplacian_centralities

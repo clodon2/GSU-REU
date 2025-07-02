@@ -170,12 +170,6 @@ class CompareData:
             final_computed = [{item[0] for item in group} for group in final_computed]
             final_ranked = [{item[0] for item in group} for group in final_ranked]
 
-            print(n, len(final_computed), len(final_ranked), end=" ")
-            for group in final_computed:
-                print(len(group), end=" ")
-
-            print("")
-
             hits = 0
             for group_set in final_computed:
                 for gt_set in final_ranked:

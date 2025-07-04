@@ -65,10 +65,10 @@ def evalute_sheaf_by_node_from_json():
         eval_compare = CompareData()
         eval_compare.setup_evaluate()
         eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacian", save_unfiltered=True,
-                                           save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+                                           save_type="write", n=10, top_specialties=10)
         for i in range(20, 110, 10):
             eval_compare.evaluate_all_and_save(sorted_rankings, title="SheafLaplacian", save_unfiltered=False,
-                                               save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
+                                               save_type="append", n=i, top_specialties=10)
 
 
 def evaluate_sheaf_by_node():
@@ -88,10 +88,10 @@ def evaluate_sheaf_by_node():
     top_specs = eval_compare.get_top_spec_names(200, 10)
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings_whole_removal(top_specs)
     eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
-                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+                                       save_type="write", n=10, top_specialties=10)
     for i in range(20, 110, 10):
         eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
-                                           save_type="append", hits_n=i, ndcg_n=i, accuracy_n=i, top_specialties=10)
+                                           save_type="append", n=i, top_specialties=10)
 
 
 def evaluate_sheaf_by_specialty():
@@ -105,17 +105,17 @@ def evaluate_sheaf_by_specialty():
                                       remove_non_overlap_spec_file="./datasets/specialty_2018_reformatted.csv")
     sheaf_laplacian = SheafLaplacian(graph,
                                      graph_builder.coboundary_columns,
-                                     restriction_weights=[.92428796, 2, .3785489], primary_specialty_weight=1.777955)
+                                     restriction_weights=[1, 1, 1], primary_specialty_weight=1.5)
     # restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757)
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
     top_specs = eval_compare.get_top_spec_names(200, 10)
     sheaf_laplacian_rankings = sheaf_laplacian.compute_all_give_rankings(top_specs)
     eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
-                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+                                       save_type="write", n=10, top_specialties=10)
     for i in range(20, 110, 10):
         eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
-                                           save_type="append", hits_n=i, ndcg_n=i, accuracy_n=i, top_specialties=10)
+                                           save_type="append", n=i, top_specialties=10)
 
 
 
@@ -132,7 +132,7 @@ def evaluate_all_methods_all_scores_sheaf_by_specialty():
 
     sheaf_laplacian = SheafLaplacian(graph=graph,
                                      coboundary_columns=graph_builder.coboundary_columns,
-                                     restriction_weights=[.92428796, 2, .3785489], primary_specialty_weight=1.777955)
+                                     restriction_weights=[1, 1, 1], primary_specialty_weight=1.5)
     # restriction_weights=[0.48546858, -1.72720085, 1.51242945], primary_specialty_weight=1.05053757
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
@@ -165,10 +165,10 @@ def evaluate_all_methods_all_scores_sheaf_by_specialty():
             ranking = method_info[0]
             title = method_info[1]
             eval_compare.evaluate_all_and_save(ranking, title=title + score_name, save_unfiltered=True,
-                                           save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+                                           save_type="write", n=10, top_specialties=10)
             for i in range(20, 60, 10):
                 eval_compare.evaluate_all_and_save(ranking, title=title + score_name, save_unfiltered=False,
-                                                   save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
+                                                   save_type="append", n=i, top_specialties=10)
 
 
 def evaluate_sheaf_from_file():
@@ -180,10 +180,10 @@ def evaluate_sheaf_from_file():
     eval_compare.setup_evaluate()
     sheaf_laplacian_rankings = eval_compare.extract_ranking("./results/results_unfilteredSheafLaplacian.csv")
     eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=True,
-                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
-    for n in range(20, 110, 10):
+                                       save_type="write", n=10, top_specialties=10)
+    for i in range(20, 110, 10):
         eval_compare.evaluate_all_and_save(sheaf_laplacian_rankings, title="SheafLaplacian", save_unfiltered=False,
-                                           save_type="append", hits_n=n, ndcg_n=n, top_specialties=10)
+                                           save_type="append", n=i, top_specialties=10)
 
 
 def evaluate_other_method(method_name:str="katz"):
@@ -208,10 +208,10 @@ def evaluate_other_method(method_name:str="katz"):
 
     method_rank = methods[method_name](graph)
     eval_compare.evaluate_all_and_save(method_rank, title=method_name, save_unfiltered=True,
-                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+                                       save_type="write", n=10, top_specialties=10)
     for i in range(20, 110, 10):
         eval_compare.evaluate_all_and_save(method_rank, title=method_name, save_unfiltered=False,
-                                           save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
+                                           save_type="append", n=i, top_specialties=10)
 
 
 
@@ -246,10 +246,10 @@ def evaluate_all_other_methods():
         ranking = method_info[0]
         title = method_info[1]
         eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=True,
-                                       save_type="write", hits_n=10, ndcg_n=10, top_specialties=10)
+                                       save_type="write", n=10, top_specialties=10)
         for i in range(20, 110, 10):
             eval_compare.evaluate_all_and_save(ranking, title=title, save_unfiltered=False,
-                                               save_type="append", hits_n=i, ndcg_n=i, top_specialties=10)
+                                               save_type="append", n=i, top_specialties=10)
 
 
 def get_top_specialties():
@@ -276,10 +276,9 @@ def get_graph_statistics():
     eval_compare = CompareData()
     eval_compare.setup_evaluate()
 
-    specialty_names = eval_compare.get_top_spec_names(n=100, top_spec_num=10)
+    specialty_names = eval_compare.get_top_spec_names(n=200, top_spec_num=10)
     get_graph_information(graph, specialty_names)
 
 
 if __name__ == "__main__":
-    evaluate_sheaf_by_node()
-    evaluate_all_other_methods()
+    evaluate_other_method()

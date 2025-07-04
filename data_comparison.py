@@ -472,18 +472,21 @@ class CompareData:
         return output
 
 
-    def evaluate_all_and_save(self, computed_ranking:dict, title="unknonwn",
-                              save_unfiltered=True, hits_n=15, ndcg_n=15, accuracy_n=15, top_specialties=5,
-                              save_type="new"):
+    def evaluate_all_and_save(self, computed_ranking:dict, title:str="unknonwn",
+                              save_unfiltered:bool=True, n:int=10, top_specialties:int=10,
+                              hits:bool=True, ndcg:bool=True, accuracy:bool=True, rbo:bool=True,
+                              save_type:str="new"):
         """
         evaluate for all evaluation methods (optionally) and save the output
         :param computed_ranking: dictionary of specialty : scores
         :param title: scoring method name, used for saving
         :param save_unfiltered: if true, save the computed_ranking information to a csv before processing
-        :param hits_n: evaluate hits at top n
-        :param ndcg_n: evaluate ndcg at top n
-        :param accuracy_n: evaluate accuracy at top n
+        :param n: depth in rankings to go to, e.g. hits@10
         :param top_specialties: specialties to consider in comparison, based on most available scores in ground truth
+        :param hits: evaluate hits at n
+        :param ndcg: evaluate ndcg at n
+        :param accuracy: evaluate accuracy at n
+        :param rbo: evaluate rbo at n
         :param save_type: "new" or "append" or "none" -- how to save data to file
         :return:
         """
@@ -496,22 +499,22 @@ class CompareData:
                     write.writerow([key, computed_ranking[key]])
 
         # trim, also removes duplicates
-        trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, hits_n, top_specialties)
+        trimmed_rankings_by_specialty = self.trim_rankings(computed_ranking, n, top_specialties)
 
         # calculate evaluations
         evaluations = []
-        if hits_n:
-            hits_at_n = self.evaluate_hits(trimmed_rankings_by_specialty, hits_n)
-            evaluations.append((hits_at_n, f"hits@{hits_n}"))
-        if ndcg_n:
-            ndcg_at_n = self.evaluate_NDCG(trimmed_rankings_by_specialty, ndcg_n)
-            evaluations.append((ndcg_at_n, f"NDCG@{ndcg_n}"))
-        if accuracy_n:
-            accuracies = self.evaluate_accuracy(trimmed_rankings_by_specialty, accuracy_n)
-            evaluations.append((accuracies, f"Accuracy@{accuracy_n}"))
-
-        rbo = self.evaluate_RBO(trimmed_rankings_by_specialty, n=hits_n, p=.95)
-        evaluations.append((rbo, f"RBO@{hits_n}"))
+        if hits:
+            hits_at_n = self.evaluate_hits(trimmed_rankings_by_specialty, n)
+            evaluations.append((hits_at_n, f"hits@{n}"))
+        if ndcg:
+            ndcg_at_n = self.evaluate_NDCG(trimmed_rankings_by_specialty, n)
+            evaluations.append((ndcg_at_n, f"NDCG@{n}"))
+        if accuracy:
+            accuracies = self.evaluate_accuracy(trimmed_rankings_by_specialty, n)
+            evaluations.append((accuracies, f"Accuracy@{n}"))
+        if rbo:
+            rbo = self.evaluate_RBO(trimmed_rankings_by_specialty, n=n, p=.95)
+            evaluations.append((rbo, f"RBO@{n}"))
 
         # save evaluations to file
         save_file_name = f"./results/results{title.strip()}.csv"

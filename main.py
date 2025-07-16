@@ -280,5 +280,31 @@ def get_graph_statistics():
     get_graph_information(graph, specialty_names)
 
 
+def get_top_npis_from_file():
+    eval_compare = CompareData()
+    eval_compare.setup_evaluate()
+    top_specs = eval_compare.get_top_spec_names(200, 10)
+    katz = eval_compare.extract_ranking("./results/results_unfilteredKatz.csv")
+    pr = eval_compare.extract_ranking("./results/results_unfilteredPageRank.csv")
+    rl = eval_compare.extract_ranking("./results/results_unfilteredRegularLaplacian.csv")
+    sl = eval_compare.extract_ranking("./results/results_unfilteredSheafLaplacian.csv")
+    methods = [katz, pr, rl, sl]
+    names = ["Katz", "pr", "rl", "sl"]
+    for method in methods:
+        for specialty in top_specs:
+            method[specialty].sort(key=lambda item: item[1], reverse=True)
+
+    for i, method in enumerate(methods):
+        print(names[i])
+        for specialty in top_specs:
+            print(specialty, ": ", method[specialty][:10])
+
+def get_json_sheaf():
+    eval_compare = CompareData()
+    sl = eval_compare.extract_ranking("./results/results_unfilteredSheafLaplacian.csv")
+    with open("./results/resultsSheaf.json", "w") as f:
+        json.dump(sl, f)
+
 if __name__ == "__main__":
-    evaluate_other_method()
+    evaluate_sheaf_by_node()
+    get_json_sheaf()

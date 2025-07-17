@@ -289,8 +289,7 @@ class SheafLaplacian:
                 attribute_total = pair_percentage + bene_percentage + same_day_percentage
 
                 # add info to array for sparse matrix conversion
-                restriction_map = (nodes[provider]["sheaf_vector"] * attribute_total *
-                                   len(nodes[provider]["sheaf_vector"]) * self.graph.degree(provider) / max_degree)
+                restriction_map = (nodes[provider]["sheaf_vector"] * attribute_total * self.graph.degree(provider) / max_degree)
                 # one restriction map is negative
                 if num == 1:
                     restriction_map *= -1

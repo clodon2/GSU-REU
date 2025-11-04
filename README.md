@@ -1,4 +1,5 @@
 # Identifying Top Performing  Providers: A Sheaf-theoretic Approach on Healthcare Networks
+By Corey Verkouteren, Djalil Sawadogo, Mehmet Aktas, and Esra Akbas
 
 This program is built to find the top healthcare providers within specific specialties in a given network. 
 This network is modeled as a graph in networkx. In this program, we test 3 methods of finding top providers, 

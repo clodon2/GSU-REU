@@ -7,6 +7,11 @@ including sheaf Laplacian centrality, graph (regular) Laplacian centrality, page
 Our developed method is the sheaf Laplacian centrality, explored in an earlier paper on influence maximization.
 Sheaf Laplacian centrality also consistently performs significantly better when predicting top healthcare providers.
 
+## Figures
+<img width="707" height="516" alt="image" src="https://github.com/user-attachments/assets/4003a17c-4d45-4623-8192-726761456614" />
+<img width="589" height="374" alt="image" src="https://github.com/user-attachments/assets/94e81456-1ae1-4fa9-af2e-78822f63bf99" />
+<img width="701" height="303" alt="image" src="https://github.com/user-attachments/assets/a643bd26-fb0f-44dd-a961-df1799fe8eb0" />
+
 ## Getting Results
 All of the functions needed to get results from the program are included in main.py, and it is suggested that you run
 the functions directly in main.py via the if statement at the bottom of the file. Every function describes exactly what
